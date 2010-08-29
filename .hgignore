@@ -1,0 +1,18 @@
+syntax: glob
+build
+dist
+*.egg-info
+syntax: glob
+.project
+.pydevproject
+.settings
+*~
+*.orig
+*.pyc
+*.pyo
+*.swp
+*.tmp
+_generated_media*
+desktop.ini
+nbproject
+settings_local.py
