@@ -7,20 +7,24 @@ from django.utils.tree import Node
 
 LOOKUP_TYPE_CONVERSION = {
     'iexact': lambda value, _: ('exact', value.lower()),
+    'istartswith': lambda value, _: ('startswith', value.lower()),
+    'iendswith': lambda value, _: ('startswith', value[::-1].lower()),
+    'endswith': lambda value, _: ('startswith', value[::-1]),
     'year': lambda value, _: ('exact', value),
     'month': lambda value, _: ('exact', value),
     'day': lambda value, _: ('exact', value),
     'week_day': lambda value, _: ('exact', value),
-    'endswith': lambda value, _: ('startswith', value[::-1])
 }
 
 VALUE_CONVERSION = {
     'iexact': lambda value: value.lower(),
+    'istartswith': lambda value: value.lower(),
+    'endswith': lambda value: value[::-1],
+    'iendswith': lambda value: value[::-1].lower(),
     'year': lambda value: value.year,
     'month': lambda value: value.month,
     'day': lambda value: value.day,
     'week_day': lambda value: value.isoweekday(),
-    'endswith': lambda value: value[::-1],
 }
 
 class SQLCompiler(object):
@@ -38,7 +42,11 @@ class SQLCompiler(object):
             constraint, lookup_type, annotation, value = child
             if model in FIELD_INDEXES and constraint.field is not None and \
                     lookup_type in FIELD_INDEXES[model].get(constraint.field.name, ()):
-                index_name = 'idxf_%s_l_%s' % (constraint.field.name, lookup_type)
+                if lookup_type in ('iexact', 'istartswith'):
+                    index_name = 'idxf_%s_l_%s_%s' % (constraint.field.name,
+                        lookup_type, 'case_insensitive')
+                else:
+                    index_name = 'idxf_%s_l_%s' % (constraint.field.name, lookup_type)
                 lookup_type, value = LOOKUP_TYPE_CONVERSION[lookup_type](value,
                     annotation)
                 constraint.field = self.query.get_meta().get_field(index_name)
@@ -58,7 +66,11 @@ class SQLInsertCompiler(object):
                     field.name not in FIELD_INDEXES[model]:
                 continue
             for lookup_type in FIELD_INDEXES[model][field.name]:
-                index_name = 'idxf_%s_l_%s' % (field.name, lookup_type)
+                if lookup_type in ('iexact', 'istartswith'):
+                    index_name = 'idxf_%s_l_%s_%s' % (field.name, lookup_type,
+                        'case_insensitive')
+                else:
+                    index_name = 'idxf_%s_l_%s' % (field.name, lookup_type)
                 index_field = model._meta.get_field(index_name)
                 self.query.values[position[index_name]] = (index_field,
                     VALUE_CONVERSION[lookup_type](value))

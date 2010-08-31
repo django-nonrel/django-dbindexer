@@ -13,7 +13,11 @@ def register_index(model, mapping):
         FIELD_INDEXES.setdefault(model, {})[name] = lookup_types
         field = model._meta.get_field(name)
         for lookup_type in lookup_types:
-            index_name = 'idxf_%s_l_%s' % (field.name, lookup_type)
+            if lookup_type in ('iexact', 'istartswith'):
+                index_name = 'idxf_%s_l_%s_%s' % (field.name, lookup_type,
+                    'case_insensitive')
+            else:
+                index_name = 'idxf_%s_l_%s' % (field.name, lookup_type)
             if lookup_type in ('month', 'day', 'year', 'week_day'):
                 index_field = models.IntegerField(editable=False, null=True)
             else:

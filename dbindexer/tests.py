@@ -10,19 +10,21 @@ class Indexed(models.Model):
 from dbindexer.api import register_index
 
 register_index(Indexed, {
-    'name': ('iexact', 'endswith'),
+    'name': ('iexact', 'endswith', 'istartswith', 'iendswith'),
     'published': ('month', 'day', 'week_day'),
 })
 
 class TestIndexed(TestCase):
     def setUp(self):
         Indexed(name='Itachi').save()
-        Indexed(name='Yondaime').save()
+        Indexed(name='YondaimE').save()
 
     def test_setup(self):
         now = datetime.now()
         self.assertEqual(1, len(Indexed.objects.all().filter(name__iexact='itachi')))
-        self.assertEqual(1, len(Indexed.objects.all().filter(name__endswith='ime')))
+        self.assertEqual(1, len(Indexed.objects.all().filter(name__istartswith='ita')))
+        self.assertEqual(1, len(Indexed.objects.all().filter(name__endswith='imE')))
+        self.assertEqual(1, len(Indexed.objects.all().filter(name__iendswith='ime')))
         self.assertEqual(2, len(Indexed.objects.all().filter(published__month=now.month)))
         self.assertEqual(2, len(Indexed.objects.all().filter(published__day=now.day)))
         self.assertEqual(2, len(Indexed.objects.all().filter(
