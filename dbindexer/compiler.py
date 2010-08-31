@@ -9,7 +9,9 @@ LOOKUP_TYPE_CONVERSION = {
     'iexact': lambda value, _: ('exact', value.lower()),
     'year': lambda value, _: ('exact', value),
     'month': lambda value, _: ('exact', value),
-    'day': lambda value, _: ('exact', value)
+    'day': lambda value, _: ('exact', value),
+    'week_day': lambda value, _: ('exact', value),
+    'endswith': lambda value, _: ('startswith', value[::-1])
 }
 
 VALUE_CONVERSION = {
@@ -17,6 +19,8 @@ VALUE_CONVERSION = {
     'year': lambda value: value.year,
     'month': lambda value: value.month,
     'day': lambda value: value.day,
+    'week_day': lambda value: value.isoweekday(),
+    'endswith': lambda value: value[::-1],
 }
 
 class SQLCompiler(object):
