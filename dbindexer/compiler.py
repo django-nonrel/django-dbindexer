@@ -7,12 +7,14 @@ from django.utils.tree import Node
 
 LOOKUP_TYPE_CONVERSION = {
     'iexact': lambda value, _: ('exact', value.lower()),
+    'year': lambda value, _: ('exact', value),
     'month': lambda value, _: ('exact', value),
     'day': lambda value, _: ('exact', value)
 }
 
 VALUE_CONVERSION = {
     'iexact': lambda value: value.lower(),
+    'year': lambda value: value.year,
     'month': lambda value: value.month,
     'day': lambda value: value.day,
 }

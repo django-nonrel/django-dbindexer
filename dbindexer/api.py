@@ -14,7 +14,7 @@ def register_index(model, mapping):
         field = model._meta.get_field(name)
         for lookup_type in lookup_types:
             index_name = 'idxf_%s_l_%s' % (field.name, lookup_type)
-            if lookup_type in ('month', 'day'):
+            if lookup_type in ('month', 'day', 'year'):
                 index_field = models.IntegerField(editable=False, null=True)
             else:
                 index_field = models.CharField(max_length=field.max_length,
