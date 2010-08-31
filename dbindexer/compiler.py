@@ -1,4 +1,4 @@
-from .api import FIELD_INDEXES
+from .api import FIELD_INDEXES, get_index_name
 from django.db.models.sql import aggregates as sqlaggregates
 from django.db.models.sql.constants import LOOKUP_SEP, MULTI, SINGLE
 from django.db.models.sql.where import AND, OR
@@ -42,11 +42,7 @@ class SQLCompiler(object):
             constraint, lookup_type, annotation, value = child
             if model in FIELD_INDEXES and constraint.field is not None and \
                     lookup_type in FIELD_INDEXES[model].get(constraint.field.name, ()):
-                if lookup_type in ('iexact', 'istartswith'):
-                    index_name = 'idxf_%s_l_%s_%s' % (constraint.field.name,
-                        lookup_type, 'case_insensitive')
-                else:
-                    index_name = 'idxf_%s_l_%s' % (constraint.field.name, lookup_type)
+                index_name = get_index_name(constraint.field.name, lookup_type)
                 lookup_type, value = LOOKUP_TYPE_CONVERSION[lookup_type](value,
                     annotation)
                 constraint.field = self.query.get_meta().get_field(index_name)
@@ -66,11 +62,7 @@ class SQLInsertCompiler(object):
                     field.name not in FIELD_INDEXES[model]:
                 continue
             for lookup_type in FIELD_INDEXES[model][field.name]:
-                if lookup_type in ('iexact', 'istartswith'):
-                    index_name = 'idxf_%s_l_%s_%s' % (field.name, lookup_type,
-                        'case_insensitive')
-                else:
-                    index_name = 'idxf_%s_l_%s' % (field.name, lookup_type)
+                index_name = get_index_name(field.name, lookup_type)
                 index_field = model._meta.get_field(index_name)
                 self.query.values[position[index_name]] = (index_field,
                     VALUE_CONVERSION[lookup_type](value))
