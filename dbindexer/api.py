@@ -14,12 +14,16 @@ def register_index(model, mapping):
         field = model._meta.get_field(name)
         for lookup_type in lookup_types:
             index_name = 'idxf_%s_l_%s' % (field.name, lookup_type)
-            index_field = models.CharField(max_length=field.max_length, editable=False, null=True)
+            if lookup_type in ('month', 'day'):
+                index_field = models.IntegerField(editable=False, null=True)
+            else:
+                index_field = models.CharField(max_length=field.max_length,
+                    editable=False, null=True)
             model.add_to_class(index_name, index_field)
 
 def load_indexes():
     for name in _MODULE_NAMES:
         try:
-            import_module(name).FIELD_INDEXES
+            import_module(name)
         except ImportError:
             pass

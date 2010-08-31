@@ -7,10 +7,14 @@ from django.utils.tree import Node
 
 LOOKUP_TYPE_CONVERSION = {
     'iexact': lambda value, _: ('exact', value.lower()),
+    'month': lambda value, _: ('exact', value),
+    'day': lambda value, _: ('exact', value)
 }
 
 VALUE_CONVERSION = {
     'iexact': lambda value: value.lower(),
+    'month': lambda value: value.month,
+    'day': lambda value: value.day,
 }
 
 class SQLCompiler(object):
@@ -29,8 +33,10 @@ class SQLCompiler(object):
             if model in FIELD_INDEXES and constraint.field is not None and \
                     lookup_type in FIELD_INDEXES[model].get(constraint.field.name, ()):
                 index_name = 'idxf_%s_l_%s' % (constraint.field.name, lookup_type)
-                lookup_type, value = LOOKUP_TYPE_CONVERSION[lookup_type](value, annotation)
+                lookup_type, value = LOOKUP_TYPE_CONVERSION[lookup_type](value,
+                    annotation)
                 constraint.field = self.query.get_meta().get_field(index_name)
+                constraint.col = constraint.field.column
                 child = (constraint, lookup_type, annotation, value)
                 filters.children[index] = child
 
@@ -48,7 +54,8 @@ class SQLInsertCompiler(object):
             for lookup_type in FIELD_INDEXES[model][field.name]:
                 index_name = 'idxf_%s_l_%s' % (field.name, lookup_type)
                 index_field = model._meta.get_field(index_name)
-                self.query.values[position[index_name]] = (index_field, VALUE_CONVERSION[lookup_type](value))
+                self.query.values[position[index_name]] = (index_field,
+                    VALUE_CONVERSION[lookup_type](value))
         return super(SQLInsertCompiler, self).execute_sql(return_id=return_id)
 
 class SQLUpdateCompiler(object):
