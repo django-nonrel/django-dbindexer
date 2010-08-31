@@ -5,6 +5,12 @@ from django.db.models.sql.where import AND, OR
 from django.db.utils import DatabaseError, IntegrityError
 from django.utils.tree import Node
 
+def contains_indexer(value):
+    # In indexing mode we add all postfixes ('o', 'lo', ..., 'hello')
+    result = []
+    result.extend([value[count:] for count in range(len(value))])
+    return result
+
 LOOKUP_TYPE_CONVERSION = {
     'iexact': lambda value, _: ('exact', value.lower()),
     'istartswith': lambda value, _: ('startswith', value.lower()),
@@ -14,6 +20,8 @@ LOOKUP_TYPE_CONVERSION = {
     'month': lambda value, _: ('exact', value),
     'day': lambda value, _: ('exact', value),
     'week_day': lambda value, _: ('exact', value),
+    'contains': lambda value, _: ('startswith', value),
+    'icontains': lambda value, _: ('startswith', value.lower()),
 }
 
 VALUE_CONVERSION = {
@@ -25,6 +33,8 @@ VALUE_CONVERSION = {
     'month': lambda value: value.month,
     'day': lambda value: value.day,
     'week_day': lambda value: value.isoweekday(),
+    'contains': lambda value: contains_indexer(value),
+    'icontains': lambda value: [val.lower() for val in contains_indexer(value)],
 }
 
 class SQLCompiler(object):

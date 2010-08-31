@@ -1,6 +1,7 @@
 from django.conf import settings
 from django.db import models
 from django.utils.importlib import import_module
+from djangotoolbox.fields import ListField
 
 _MODULE_NAMES = getattr(settings, 'DB_INDEX_MODULES', ())
 
@@ -25,6 +26,9 @@ def register_index(model, mapping):
             index_name = get_index_name(field.name, lookup_type)
             if lookup_type in ('month', 'day', 'year', 'week_day'):
                 index_field = models.IntegerField(editable=False, null=True)
+            elif lookup_type == 'contains':
+                index_field = ListField(models.CharField(
+                    max_length=field.max_length), editable=False, null=True)
             else:
                 index_field = models.CharField(max_length=field.max_length,
                     editable=False, null=True)
