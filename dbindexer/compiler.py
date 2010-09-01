@@ -1,9 +1,10 @@
-from .api import FIELD_INDEXES, get_index_name
+from .api import FIELD_INDEXES, get_index_name, regex
 from django.db.models.sql import aggregates as sqlaggregates
 from django.db.models.sql.constants import LOOKUP_SEP, MULTI, SINGLE
 from django.db.models.sql.where import AND, OR
 from django.db.utils import DatabaseError, IntegrityError
 from django.utils.tree import Node
+import re
 
 def contains_indexer(value):
     # In indexing mode we add all postfixes ('o', 'lo', ..., 'hello')
@@ -22,8 +23,11 @@ LOOKUP_TYPE_CONVERSION = {
     'week_day': lambda value, _: ('exact', value),
     'contains': lambda value, _: ('startswith', value),
     'icontains': lambda value, _: ('startswith', value.lower()),
+    'regex': lambda value, _: ('exact', ':' + value),
+    'iregex': lambda value, _: ('exact', 'i:' + value),
 }
 
+# value conversion for (i)regex works via special code
 VALUE_CONVERSION = {
     'iexact': lambda value: value.lower(),
     'istartswith': lambda value: value.lower(),
@@ -68,14 +72,24 @@ class SQLInsertCompiler(object):
 
         model = self.query.model
         for field, value in self.query.values[:]:
+            regex_values = []
             if field is None or model not in FIELD_INDEXES or \
                     field.name not in FIELD_INDEXES[model]:
                 continue
             for lookup_type in FIELD_INDEXES[model][field.name]:
+                if lookup_type in ['regex', 'iregex']:
+                    continue
                 index_name = get_index_name(field.name, lookup_type)
                 index_field = model._meta.get_field(index_name)
-                self.query.values[position[index_name]] = (index_field,
-                    VALUE_CONVERSION[lookup_type](value))
+                if isinstance(lookup_type, regex):
+                    if lookup_type.match(value):
+                        val = ('i:' if lookup_type.flags & re.I else ':') + \
+                            lookup_type.pattern
+                        regex_values.append(val)
+                    self.query.values[position[index_name]] = (index_field, regex_values)
+                else:
+                    self.query.values[position[index_name]] = (index_field,
+                        VALUE_CONVERSION[lookup_type](value))
         return super(SQLInsertCompiler, self).execute_sql(return_id=return_id)
 
 class SQLUpdateCompiler(object):
