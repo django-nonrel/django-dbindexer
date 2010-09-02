@@ -1,12 +1,8 @@
-from django.conf import settings
 from django.db import models
-from django.utils.importlib import import_module
 from djangotoolbox.fields import ListField
 
 import re
 regex = type(re.compile(''))
-
-_MODULE_NAMES = getattr(settings, 'DB_INDEX_MODULES', ())
 
 FIELD_INDEXES = {}
 
@@ -56,10 +52,3 @@ def register_index(model, mapping):
             model.add_to_class(index_name, index_field)
         # set new lookup_types (can be different because of regex lookups)
         FIELD_INDEXES.setdefault(model, {})[name] = new_lookup_types
-
-def load_indexes():
-    for name in _MODULE_NAMES:
-        try:
-            import_module(name)
-        except ImportError:
-            pass

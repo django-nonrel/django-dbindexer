@@ -1,3 +1,8 @@
+from django.conf import settings
+from django.utils.importlib import import_module
+
+_MODULE_NAMES = getattr(settings, 'DB_INDEX_MODULES', ())
+
 def autodiscover():
     """
     Automatically loads database index definitions from db_indexes modules in
@@ -27,10 +32,17 @@ def autodiscover():
         # but doesn't actually try to import the module. So skip this app if
         # its search_indexes.py doesn't exist
         try:
-            imp.find_module('db_indexes', app_path)
+            imp.find_module('dbindexes', app_path)
         except ImportError:
             continue
 
         # Step 3: import the app's search_index file. If this has errors we want them
         # to bubble up.
-        import_module("%s.db_indexes" % app)
+        import_module("%s.dbindexes" % app)
+
+def load_indexes():
+    for name in _MODULE_NAMES:
+        try:
+            import_module(name)
+        except ImportError:
+            pass
