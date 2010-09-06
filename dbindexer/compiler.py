@@ -41,6 +41,13 @@ VALUE_CONVERSION = {
     'icontains': lambda value: [val.lower() for val in contains_indexer(value)],
 }
 
+def get_denormalization_value(start_model, index_key, foreignkey_pk):
+    denormalized_model = start_model._meta.get_field(index_key.split('__')[0]).rel.to
+    foreignkey = denormalized_model.objects.all().get(pk=foreignkey_pk)
+    for value in index_key.split('__')[1:-1]:
+        foreignkey = getattr(foreignkey, value)
+    return getattr(foreignkey, index_key.split('__')[-1])
+
 class SQLCompiler(object):
     def results_iter(self):
         self.convert_filters(self.query.where)
@@ -73,13 +80,47 @@ class SQLInsertCompiler(object):
         model = self.query.model
         for field, value in self.query.values[:]:
             regex_values = []
-            if field is None or model not in FIELD_INDEXES or \
-                    field.name not in FIELD_INDEXES[model]:
+            index_key = None
+            if field is None or model not in FIELD_INDEXES:
                 continue
-            for lookup_type in FIELD_INDEXES[model][field.name]:
+            if field.name not in FIELD_INDEXES[model]:
+                # check for denormalization indexes, if none exist continue with
+                # next field
+                denormalization_indexes = [field_index.split('__', 1)[0]
+                    for field_index in FIELD_INDEXES[model].keys()]
+                if field.name not in denormalization_indexes:
+                    continue
+                else:
+                    # TODO: there can exit multiple denormalization definitions
+                    # here!
+                    for field_index in FIELD_INDEXES[model].keys():
+                        if field_index.startswith(field.name):
+                            index_key = field_index
+            else:
+                # TODO: check for denormalization index definitions here via
+                # split too!
+                # TODO: check for denormalization on the other side to start
+                # background tasks
+                start_background_tasks = [lookup_type.startswith('denormalized__')
+                    for lookup_type in FIELD_INDEXES[model][field.name]
+                    if not isinstance(lookup_type, regex)]
+                if True in start_background_tasks:
+                    # TODO: we should push background tasks here
+                    continue
+                index_key = field.name
+
+            # TODO: iterate through all possible denormalizations i.e.
+            # for index_key in index_keys
+            for lookup_type in FIELD_INDEXES[model][index_key]:
+                if len(index_key.split('__', 1)) > 1:
+                    # TODO: this has to be done in background too so that it's
+                    # possible to use transactions
+                    # denormalization case
+                    value = get_denormalization_value(model, index_key,
+                        value)
                 if lookup_type in ['regex', 'iregex']:
                     continue
-                index_name = get_index_name(field.name, lookup_type)
+                index_name = get_index_name(index_key, lookup_type)
                 index_field = model._meta.get_field(index_name)
                 if isinstance(lookup_type, regex):
                     if lookup_type.match(value):
@@ -90,6 +131,8 @@ class SQLInsertCompiler(object):
                 else:
                     self.query.values[position[index_name]] = (index_field,
                         VALUE_CONVERSION[lookup_type](value))
+        # debug info
+        print dict((field.name, value) for field, value in self.query.values)
         return super(SQLInsertCompiler, self).execute_sql(return_id=return_id)
 
 class SQLUpdateCompiler(object):
