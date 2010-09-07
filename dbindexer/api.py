@@ -59,17 +59,21 @@ def register_index(model, mapping):
                     max_length=256), editable=False, null=True)
                 regex_index = True
             elif lookup_type == 'contains':
+                # in the case of foreignkey we do not know which max_length to use
+                # so use 500
                 index_field = ListField(models.CharField(
-                    max_length=field.max_length), editable=False, null=True)
+                    max_length=field.max_length or 500), editable=False, null=True)
             elif lookup_type == '$default':
                 # TODO: rename $default because it will be used for the field name
-                # and not every database allow to use $
+                # and not every database allows to use $
                 index_field = deepcopy(field)
                 if isinstance(index_field, (models.DateTimeField,
                         models.DateField, models.TimeField)):
                     index_field.auto_now_add = index_field.auto_now = False
             else:
-                index_field = models.CharField(max_length=field.max_length,
+                # in the case of foreignkey we do not know which max_length to use
+                # so use 500
+                index_field = models.CharField(max_length=field.max_length or 500,
                     editable=False, null=True)
             model.add_to_class(index_name, index_field)
 

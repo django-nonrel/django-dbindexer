@@ -6,27 +6,37 @@ import re
 
 class ForeignIndexed(models.Model):
     title = models.CharField(max_length=500)
+    name = models.CharField(max_length=500)
+
+class ForeignIndexed2(models.Model):
+    name = models.CharField(max_length=500)
 
 class Indexed(models.Model):
     name = models.CharField(max_length=500)
     published = models.DateTimeField(auto_now_add=True)
     foreignkey = models.ForeignKey(ForeignIndexed)
+    foreignkey2 = models.ForeignKey(ForeignIndexed2, related_name='idx_set')
 
 register_index(Indexed, {
     'name': ('iexact', 'endswith', 'istartswith', 'iendswith', 'contains',
         'icontains', re.compile('^i+', re.I), re.compile('^I+'),
         re.compile('^i\d*i$', re.I)),
     'published': ('month', 'day', 'week_day'),
-    'foreignkey__title': 'iexact'
+    'foreignkey': 'iexact',
+    'foreignkey__title': 'iexact',
+    'foreignkey__name': 'iexact',
+    'foreignkey2__name': '$default'
 })
 
 class TestIndexed(TestCase):
     def setUp(self):
-        kyuubi = ForeignIndexed(title='Kyuubi')
+        kyuubi = ForeignIndexed(name='Kyuubi', title='Bijuu')
+        juubi = ForeignIndexed2(name='Juubi')
         kyuubi.save()
-        Indexed(name='ItAchi', foreignkey=kyuubi).save()
-        Indexed(name='YondAimE', foreignkey=kyuubi).save()
-        Indexed(name='I1038593i', foreignkey=kyuubi).save()
+        juubi.save()
+        Indexed(name='ItAchi', foreignkey=kyuubi, foreignkey2=juubi).save()
+        Indexed(name='YondAimE', foreignkey=kyuubi, foreignkey2=juubi).save()
+        Indexed(name='I1038593i', foreignkey=kyuubi, foreignkey2=juubi).save()
 
     def test_setup(self):
         now = datetime.now()

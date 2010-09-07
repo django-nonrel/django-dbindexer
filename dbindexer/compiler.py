@@ -1,4 +1,5 @@
 from .api import FIELD_INDEXES, get_index_name, regex
+from django.db import models
 from django.db.models.sql import aggregates as sqlaggregates
 from django.db.models.sql.constants import LOOKUP_SEP, MULTI, SINGLE
 from django.db.models.sql.where import AND, OR
@@ -39,6 +40,8 @@ VALUE_CONVERSION = {
     'week_day': lambda value: value.isoweekday(),
     'contains': lambda value: contains_indexer(value),
     'icontains': lambda value: [val.lower() for val in contains_indexer(value)],
+    # TODO: clean $default case
+    '$default': lambda value: value,
 }
 
 def get_denormalization_value(start_model, index_key, foreignkey_pk):
@@ -78,9 +81,14 @@ class SQLInsertCompiler(object):
             position[field.name] = index
 
         model = self.query.model
+        # TODO: we should reverse this iteration, instead of iterating through all
+        # fields and values and then looking up their index definitions we should
+        # iterate through all index definitions first and getting the
+        # corresponding fields and values or in general we need to refactore the
+        # whole dbindexer ;)
         for field, value in self.query.values[:]:
             regex_values = []
-            index_key = None
+            index_keys = []
             if field is None or model not in FIELD_INDEXES:
                 continue
             if field.name not in FIELD_INDEXES[model]:
@@ -91,46 +99,54 @@ class SQLInsertCompiler(object):
                 if field.name not in denormalization_indexes:
                     continue
                 else:
-                    # TODO: there can exit multiple denormalization definitions
-                    # here!
                     for field_index in FIELD_INDEXES[model].keys():
-                        if field_index.startswith(field.name):
-                            index_key = field_index
+                        # check against field name + '__' to avoid name clashes
+                        # i.e. field.name = foreignkey and field2.name = foreignkey2
+                        if field_index.startswith(field.name + '__'):
+                            index_keys.append(field_index)
             else:
-                # TODO: check for denormalization index definitions here via
-                # split too!
-                # TODO: check for denormalization on the other side to start
-                # background tasks
                 start_background_tasks = [lookup_type.startswith('denormalized__')
                     for lookup_type in FIELD_INDEXES[model][field.name]
                     if not isinstance(lookup_type, regex)]
                 if True in start_background_tasks:
                     # TODO: we should push background tasks here
                     continue
-                index_key = field.name
+                index_keys.append(field.name)
+                # check for denormalization indexes here too
+                for field_index in FIELD_INDEXES[model].keys():
+                    # check against field name + '__' to avoid name clashes
+                    # i.e. field.name = foreignkey and field2.name = foreignkey2
+                    if field_index.startswith(field.name + '__'):
+                        index_keys.append(field_index)
 
-            # TODO: iterate through all possible denormalizations i.e.
-            # for index_key in index_keys
-            for lookup_type in FIELD_INDEXES[model][index_key]:
-                if len(index_key.split('__', 1)) > 1:
-                    # TODO: this has to be done in background too so that it's
-                    # possible to use transactions
-                    # denormalization case
-                    value = get_denormalization_value(model, index_key,
-                        value)
-                if lookup_type in ['regex', 'iregex']:
-                    continue
-                index_name = get_index_name(index_key, lookup_type)
-                index_field = model._meta.get_field(index_name)
-                if isinstance(lookup_type, regex):
-                    if lookup_type.match(value):
-                        val = ('i:' if lookup_type.flags & re.I else ':') + \
-                            lookup_type.pattern
-                        regex_values.append(val)
-                    self.query.values[position[index_name]] = (index_field, regex_values)
-                else:
-                    self.query.values[position[index_name]] = (index_field,
-                        VALUE_CONVERSION[lookup_type](value))
+            foreign_key_pk = value
+            for index_key in index_keys:
+                for lookup_type in FIELD_INDEXES[model][index_key]:
+                    if len(index_key.split('__', 1)) > 1:
+                        # TODO: this has to be done in background too so that it's
+                        # possible to use transactions
+                        # denormalization case
+                        value = get_denormalization_value(model, index_key,
+                            foreign_key_pk)
+                    if lookup_type in ['regex', 'iregex']:
+                        continue
+                    index_name = get_index_name(index_key, lookup_type)
+                    index_field = model._meta.get_field(index_name)
+                    if isinstance(lookup_type, regex):
+                        if lookup_type.match(value):
+                            val = ('i:' if lookup_type.flags & re.I else ':') + \
+                                lookup_type.pattern
+                            regex_values.append(val)
+                        self.query.values[position[index_name]] = (index_field,
+                            regex_values)
+                    else:
+                        if isinstance(field, models.ForeignKey) and \
+                                len(index_key.split('__', 1)) <= 1:
+                            # case for which we try to convert the foreign key
+                            # value itself
+                            value = unicode(value)
+                        self.query.values[position[index_name]] = (index_field,
+                            VALUE_CONVERSION[lookup_type](value))
         # debug info
         print dict((field.name, value) for field, value in self.query.values)
         return super(SQLInsertCompiler, self).execute_sql(return_id=return_id)
