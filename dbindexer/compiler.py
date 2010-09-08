@@ -148,7 +148,7 @@ class SQLInsertCompiler(object):
                         self.query.values[position[index_name]] = (index_field,
                             VALUE_CONVERSION[lookup_type](value))
         # debug info
-        print dict((field.name, value) for field, value in self.query.values)
+#        print dict((field.name, value) for field, value in self.query.values)
         return super(SQLInsertCompiler, self).execute_sql(return_id=return_id)
 
 class SQLUpdateCompiler(object):

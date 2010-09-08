@@ -38,30 +38,34 @@ class TestIndexed(TestCase):
         Indexed(name='YondAimE', foreignkey=kyuubi, foreignkey2=juubi).save()
         Indexed(name='I1038593i', foreignkey=kyuubi, foreignkey2=juubi).save()
 
-    def test_setup(self):
+    def test_iexact(self):
+        self.assertEqual(1, len(Indexed.objects.all().filter(name__iexact='itachi')))
+
+    def test_istartswith(self):
+        self.assertEqual(1, len(Indexed.objects.all().filter(name__istartswith='ita')))
+
+    def test_endswith(self):
+        self.assertEqual(1, len(Indexed.objects.all().filter(name__endswith='imE')))
+        self.assertEqual(1, len(Indexed.objects.all().filter(name__iendswith='ime')))
+
+    def test_regex(self):
+        self.assertEqual(2, len(Indexed.objects.all().filter(name__iregex='^i+')))
+        self.assertEqual(2, len(Indexed.objects.all().filter(name__regex='^I+')))
+        self.assertEqual(0, len(Indexed.objects.all().filter(name__regex='^i+')))
+        self.assertEqual(1, len(Indexed.objects.all().filter(name__iregex='^i\d*i$')))
+
+    def test_date_filters(self):
         now = datetime.now()
-        self.assertEqual(1, len(Indexed.objects.all().filter(name__iexact='itachi')))
-        self.assertEqual(1, len(Indexed.objects.all().filter(name__istartswith='ita')))
-        self.assertEqual(1, len(Indexed.objects.all().filter(name__endswith='imE')))
-        self.assertEqual(1, len(Indexed.objects.all().filter(name__iendswith='ime')))
-        self.assertEqual(2, len(Indexed.objects.all().filter(name__iregex='^i+')))
-        self.assertEqual(2, len(Indexed.objects.all().filter(name__regex='^I+')))
-        self.assertEqual(0, len(Indexed.objects.all().filter(name__regex='^i+')))
-        self.assertEqual(1, len(Indexed.objects.all().filter(name__iregex='^i\d*i$')))
-        self.assertEqual(1, len(Indexed.objects.all().filter(name__iexact='itachi')))
-        self.assertEqual(1, len(Indexed.objects.all().filter(name__istartswith='ita')))
-        self.assertEqual(1, len(Indexed.objects.all().filter(name__endswith='imE')))
-        self.assertEqual(1, len(Indexed.objects.all().filter(name__iendswith='ime')))
-        self.assertEqual(2, len(Indexed.objects.all().filter(name__iregex='^i+')))
-        self.assertEqual(2, len(Indexed.objects.all().filter(name__regex='^I+')))
-        self.assertEqual(0, len(Indexed.objects.all().filter(name__regex='^i+')))
-        self.assertEqual(1, len(Indexed.objects.all().filter(name__iregex='^i\d*i$')))
-
-        # passes on production but not on sdk (development)
-#        self.assertEqual(1, len(Indexed.objects.all().filter(name__contains='Aim')))
-#        self.assertEqual(1, len(Indexed.objects.all().filter(name__icontains='aim')))
-
         self.assertEqual(3, len(Indexed.objects.all().filter(published__month=now.month)))
         self.assertEqual(3, len(Indexed.objects.all().filter(published__day=now.day)))
         self.assertEqual(3, len(Indexed.objects.all().filter(
             published__week_day=now.isoweekday())))
+
+    def test_joins(self):
+        # to-one direction
+        pass
+
+#    def test_contains(self):
+#        # passes on production but not on sdk (development)
+#        self.assertEqual(1, len(Indexed.objects.all().filter(name__contains='Aim')))
+#        self.assertEqual(1, len(Indexed.objects.all().filter(name__icontains='aim')))
