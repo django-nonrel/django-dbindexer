@@ -41,13 +41,15 @@ class TestIndexed(TestCase):
         Indexed(name='I1038593i', foreignkey=kyuubi, foreignkey2=juubi).save()
 
     def test_joins(self):
-#        Indexed.objects.all().filter(foreignkey__fk__name__iexact='kyuubi')[0]
-        Indexed.objects.all().filter(foreignkey__fk__name__iexact='juuBi',
-            foreignkey__title__iexact='biJuu')[0]
-#        Indexed.objects.all().filter(foreignkey__name__iexact='kyuubi',
-#            foreignkey__title__iexact='GAGA')[0]
-#        Indexed.objects.all().filter(foreignkey__title__iexact='GAGA')[0]
-#        ForeignIndexed.objects.filter(indexed__name='kyuubi')[0]
+        self.assertEqual(3, len(Indexed.objects.all().filter(
+            foreignkey__fk__name__iexact='juuBi')))
+        self.assertEqual(3, len(Indexed.objects.all().filter(
+            foreignkey__fk__name__iexact='juuBi',
+            foreignkey__title__iexact='biJuu')))
+        self.assertEqual(3, len(Indexed.objects.all().filter(
+            foreignkey__name__iexact='kyuuBi', foreignkey__title__iexact='biJuu')))
+        self.assertEqual(3, len(Indexed.objects.all().filter(
+            foreignkey__title__iexact='biJuu')))
 
     def test_iexact(self):
         self.assertEqual(1, len(Indexed.objects.all().filter(name__iexact='itachi')))
