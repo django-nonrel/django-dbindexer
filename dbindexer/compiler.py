@@ -1,4 +1,4 @@
-from .api import FIELD_INDEXES, get_index_name, regex
+from .api import FIELD_INDEXES, COLUMN_TO_NAME, get_index_name, get_column_name, regex
 from django.db import models
 from django.db.models.sql import aggregates as sqlaggregates
 from django.db.models.sql.constants import LOOKUP_SEP, MULTI, SINGLE
@@ -51,10 +51,71 @@ def get_denormalization_value(start_model, index_key, foreignkey_pk):
         foreignkey = getattr(foreignkey, value)
     return getattr(foreignkey, index_key.split('__')[-1])
 
+
+def __repr__(self):
+    return '%s, %s, %s, %s' % (self.alias, self.col, self.field.name,
+        self.field.model.__name__)
+
+from django.db.models.sql.where import Constraint
+Constraint.__repr__ = __repr__
+
+# TODO: manipulate a copy of the query instead of the query itself. This has to
+# be done because the query can be reused afterwoods by the user so that a
+# manipulated query can result in strange behavior for these cases!
+
 class SQLCompiler(object):
     def results_iter(self):
         self.convert_filters(self.query.where)
         return super(SQLCompiler, self).results_iter()
+
+
+    def get_column_index(self, constraint):
+        if constraint.field:
+            column_chain = constraint.field.column
+            alias = constraint.alias
+            while alias:
+                join = self.query.alias_map[alias]
+                if join[2] and join[2] == 'INNER JOIN':
+                    column_chain += '__' + join[4]
+                    alias = self.query.alias_map[alias][3]
+                else:
+                    alias = None
+        return '__'.join(reversed(column_chain.split('__')))
+
+    def resolve_join(self, constraint, lookup_type, annotation, value, filters,
+            index, column_index):
+        if not constraint.field:
+            return
+
+        alias = constraint.alias
+        while True:
+            join = self.query.alias_map[alias]
+            next_alias = self.query.alias_map[alias][3]
+            if not next_alias:
+                break
+            table_name = join[0]
+            self.query.unref_alias(alias)
+            if self.query.alias_refcount[alias] < 1:
+                # we have to remove all information about the join
+                join_map_key = self.query.rev_join_map[alias]
+                del self.query.join_map[join_map_key]
+                del self.query.rev_join_map[alias]
+                del self.query.alias_map[alias]
+                self.query.table_map[table_name].remove(alias)
+                if len(self.query.table_map[table_name]) == 0:
+                    del self.query.table_map[table_name]
+                del self.query.alias_refcount[alias]
+
+            alias = next_alias
+
+        index_name = get_index_name(column_index, lookup_type)
+        lookup_type, value = LOOKUP_TYPE_CONVERSION[lookup_type](value,
+            annotation)
+        constraint.alias = alias
+        constraint.field = self.query.get_meta().get_field(index_name)
+        constraint.col = constraint.field.column
+        child = (constraint, lookup_type, annotation, value)
+        filters.children[index] = child
 
     def convert_filters(self, filters):
         model = self.query.model
@@ -64,15 +125,22 @@ class SQLCompiler(object):
                 continue
 
             constraint, lookup_type, annotation, value = child
-            if model in FIELD_INDEXES and constraint.field is not None and \
-                    lookup_type in FIELD_INDEXES[model].get(constraint.field.name, ()):
-                index_name = get_index_name(constraint.field.name, lookup_type)
-                lookup_type, value = LOOKUP_TYPE_CONVERSION[lookup_type](value,
-                    annotation)
-                constraint.field = self.query.get_meta().get_field(index_name)
-                constraint.col = constraint.field.column
-                child = (constraint, lookup_type, annotation, value)
-                filters.children[index] = child
+            if model in FIELD_INDEXES and constraint.field is not None:
+                if constraint.alias in self.query.table_map[model._meta.db_table] and \
+                        lookup_type in FIELD_INDEXES[model].get(constraint.field.column, ()):
+                    index_name = get_index_name(constraint.field.column, lookup_type)
+                    lookup_type, value = LOOKUP_TYPE_CONVERSION[lookup_type](value,
+                        annotation)
+                    constraint.field = self.query.get_meta().get_field(index_name)
+                    constraint.col = constraint.field.column
+                    child = (constraint, lookup_type, annotation, value)
+                    filters.children[index] = child
+                else:
+                    # check for joins
+                    column_index = self.get_column_index(constraint)
+                    if column_index in FIELD_INDEXES[model]:
+                        self.resolve_join(constraint, lookup_type, annotation,
+                            value, filters, index, column_index)
 
 class SQLInsertCompiler(object):
     def execute_sql(self, return_id=False):
@@ -91,32 +159,34 @@ class SQLInsertCompiler(object):
             index_keys = []
             if field is None or model not in FIELD_INDEXES:
                 continue
-            if field.name not in FIELD_INDEXES[model]:
+            if field.column not in FIELD_INDEXES[model]:
                 # check for denormalization indexes, if none exist continue with
                 # next field
                 denormalization_indexes = [field_index.split('__', 1)[0]
                     for field_index in FIELD_INDEXES[model].keys()]
-                if field.name not in denormalization_indexes:
+                if field.column not in denormalization_indexes:
                     continue
                 else:
                     for field_index in FIELD_INDEXES[model].keys():
-                        # check against field name + '__' to avoid name clashes
-                        # i.e. field.name = foreignkey and field2.name = foreignkey2
-                        if field_index.startswith(field.name + '__'):
+                        # check against field column + '__' to avoid name clashes
+                        # caused by startswith i.e. field.column = foreignkey
+                        # and field2.column = foreignkey2
+                        if field_index.startswith(field.column + '__'):
                             index_keys.append(field_index)
             else:
                 start_background_tasks = [lookup_type.startswith('denormalized__')
-                    for lookup_type in FIELD_INDEXES[model][field.name]
+                    for lookup_type in FIELD_INDEXES[model][field.column]
                     if not isinstance(lookup_type, regex)]
                 if True in start_background_tasks:
-                    # TODO: we should push background tasks here
+                    # TODO: we should push background tasks here, background tasks
+                    # have to use model.update to ensure transactional behavior
                     continue
-                index_keys.append(field.name)
+                index_keys.append(field.column)
                 # check for denormalization indexes here too
                 for field_index in FIELD_INDEXES[model].keys():
                     # check against field name + '__' to avoid name clashes
                     # i.e. field.name = foreignkey and field2.name = foreignkey2
-                    if field_index.startswith(field.name + '__'):
+                    if field_index.startswith(field.column + '__'):
                         index_keys.append(field_index)
 
             foreign_key_pk = value
@@ -124,10 +194,11 @@ class SQLInsertCompiler(object):
                 for lookup_type in FIELD_INDEXES[model][index_key]:
                     if len(index_key.split('__', 1)) > 1:
                         # TODO: this has to be done in background too so that it's
-                        # possible to use transactions
+                        # possible to use transactions, background tasks
+                        # have to use model.update to ensure transactional behavior
                         # denormalization case
-                        value = get_denormalization_value(model, index_key,
-                            foreign_key_pk)
+                        value = get_denormalization_value(model,
+                            COLUMN_TO_NAME[index_key], foreign_key_pk)
                     if lookup_type in ['regex', 'iregex']:
                         continue
                     index_name = get_index_name(index_key, lookup_type)
@@ -148,7 +219,7 @@ class SQLInsertCompiler(object):
                         self.query.values[position[index_name]] = (index_field,
                             VALUE_CONVERSION[lookup_type](value))
         # debug info
-#        print dict((field.name, value) for field, value in self.query.values)
+#        print dict((field.column, value) for field, value in self.query.values)
         return super(SQLInsertCompiler, self).execute_sql(return_id=return_id)
 
 class SQLUpdateCompiler(object):
