@@ -68,7 +68,6 @@ class SQLCompiler(object):
         self.convert_filters(self.query.where)
         return super(SQLCompiler, self).results_iter()
 
-
     def get_column_index(self, constraint):
         if constraint.field:
             column_chain = constraint.field.column

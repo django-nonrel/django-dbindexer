@@ -50,16 +50,19 @@ class TestIndexed(TestCase):
             foreignkey__name__iexact='kyuuBi', foreignkey__title__iexact='biJuu')))
         self.assertEqual(3, len(Indexed.objects.all().filter(
             foreignkey__title__iexact='biJuu')))
+        self.assertEqual(1, len(Indexed.objects.all().filter(
+            foreignkey__title__iexact='biJuu', name__iendswith='iMe')))
+
 
     def test_iexact(self):
-        self.assertEqual(1, len(Indexed.objects.all().filter(name__iexact='itachi')))
+        self.assertEqual(1, len(Indexed.objects.all().filter(name__iexact='itaChi')))
 
     def test_istartswith(self):
-        self.assertEqual(1, len(Indexed.objects.all().filter(name__istartswith='ita')))
+        self.assertEqual(1, len(Indexed.objects.all().filter(name__istartswith='iTa')))
 
     def test_endswith(self):
         self.assertEqual(1, len(Indexed.objects.all().filter(name__endswith='imE')))
-        self.assertEqual(1, len(Indexed.objects.all().filter(name__iendswith='ime')))
+        self.assertEqual(1, len(Indexed.objects.all().filter(name__iendswith='iMe')))
 
     def test_regex(self):
         self.assertEqual(2, len(Indexed.objects.all().filter(name__iregex='^i+')))
