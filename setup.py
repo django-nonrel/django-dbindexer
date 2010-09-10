@@ -8,10 +8,10 @@ except:
     pass
 
 setup(name='django-dbindexer',
-      version='0.1',
+      version='0.2',
       packages=find_packages(),
-      author='Waldemar Kornewald',
-      author_email='wkornewald@gmail.com',
+      author='Waldemar Kornewald, Thomas Wanschik',
+      author_email='team@allbuttonspressed.com',
       url='http://www.allbuttonspressed.com/projects/django-dbindexer',
       license='MIT',
       description=DESCRIPTION,
