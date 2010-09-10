@@ -1,7 +1,8 @@
 from .api import FIELD_INDEXES, COLUMN_TO_NAME, get_index_name, get_column_name, regex
 from django.db import models
 from django.db.models.sql import aggregates as sqlaggregates
-from django.db.models.sql.constants import LOOKUP_SEP, MULTI, SINGLE
+from django.db.models.sql.constants import LOOKUP_SEP, MULTI, SINGLE, LHS_ALIAS,\
+    JOIN_TYPE, LHS_JOIN_COL, TABLE_NAME, RHS_JOIN_COL
 from django.db.models.sql.where import AND, OR
 from django.db.utils import DatabaseError, IntegrityError
 from django.utils.tree import Node
@@ -53,7 +54,7 @@ def get_denormalization_value(start_model, index_key, foreignkey_pk):
 
 
 def __repr__(self):
-    return '%s, %s, %s, %s' % (self.alias, self.col, self.field.name,
+    return '<%s, %s, %s, %s>' % (self.alias, self.col, self.field.name,
         self.field.model.__name__)
 
 from django.db.models.sql.where import Constraint
@@ -74,9 +75,9 @@ class SQLCompiler(object):
             alias = constraint.alias
             while alias:
                 join = self.query.alias_map[alias]
-                if join[2] and join[2] == 'INNER JOIN':
-                    column_chain += '__' + join[4]
-                    alias = self.query.alias_map[alias][3]
+                if join[JOIN_TYPE] == 'INNER JOIN':
+                    column_chain += '__' + join[LHS_JOIN_COL]
+                    alias = self.query.alias_map[alias][LHS_ALIAS]
                 else:
                     alias = None
         return '__'.join(reversed(column_chain.split('__')))
@@ -88,23 +89,10 @@ class SQLCompiler(object):
 
         alias = constraint.alias
         while True:
-            join = self.query.alias_map[alias]
-            next_alias = self.query.alias_map[alias][3]
+            next_alias = self.query.alias_map[alias][LHS_ALIAS]
             if not next_alias:
                 break
-            table_name = join[0]
-            self.query.unref_alias(alias)
-            if self.query.alias_refcount[alias] < 1:
-                # we have to remove all information about the join
-                join_map_key = self.query.rev_join_map[alias]
-                del self.query.join_map[join_map_key]
-                del self.query.rev_join_map[alias]
-                del self.query.alias_map[alias]
-                self.query.table_map[table_name].remove(alias)
-                if len(self.query.table_map[table_name]) == 0:
-                    del self.query.table_map[table_name]
-                del self.query.alias_refcount[alias]
-
+            self.unref_alias(alias)
             alias = next_alias
 
         index_name = get_index_name(column_index, lookup_type)
@@ -116,6 +104,20 @@ class SQLCompiler(object):
         child = (constraint, lookup_type, annotation, value)
         filters.children[index] = child
 
+    def unref_alias(self, alias):
+        table_name = self.query.alias_map[alias][TABLE_NAME]
+        self.query.alias_refcount[alias] -= 1
+        if self.query.alias_refcount[alias] < 1:
+            # Remove all information about the join
+            del self.query.alias_refcount[alias]
+            del self.query.join_map[self.query.rev_join_map[alias]]
+            del self.query.rev_join_map[alias]
+            del self.query.alias_map[alias]
+            self.query.table_map[table_name].remove(alias)
+            if len(self.query.table_map[table_name]) == 0:
+                del self.query.table_map[table_name]
+            self.query.used_aliases.discard(alias)
+
     def convert_filters(self, filters):
         model = self.query.model
         for index, child in enumerate(filters.children[:]):
@@ -125,8 +127,12 @@ class SQLCompiler(object):
 
             constraint, lookup_type, annotation, value = child
             if model in FIELD_INDEXES and constraint.field is not None:
-                if constraint.alias in self.query.table_map[model._meta.db_table] and \
-                        lookup_type in FIELD_INDEXES[model].get(constraint.field.column, ()):
+                if lookup_type == 'isnull' and \
+                        isinstance(constraint.field, models.ForeignKey):
+                    self.fix_fk_null_filter(constraint)
+                if constraint.alias == self.query.table_map[model._meta.db_table][0]:
+                    if lookup_type not in FIELD_INDEXES[model].get(constraint.field.column, ()):
+                        continue
                     index_name = get_index_name(constraint.field.column, lookup_type)
                     lookup_type, value = LOOKUP_TYPE_CONVERSION[lookup_type](value,
                         annotation)
@@ -137,9 +143,29 @@ class SQLCompiler(object):
                 else:
                     # check for joins
                     column_index = self.get_column_index(constraint)
-                    if column_index in FIELD_INDEXES[model]:
+                    if lookup_type in FIELD_INDEXES[model].get(column_index, ()):
                         self.resolve_join(constraint, lookup_type, annotation,
                             value, filters, index, column_index)
+
+    def fix_fk_null_filter(self, constraint):
+        # Django doesn't generate correct code for ForeignKey__isnull.
+        # It becomes a JOIN with pk__isnull which won't work on nonrel DBs,
+        # so we rewrite the JOIN here.
+        alias = constraint.alias
+        table_name = self.query.alias_map[alias][TABLE_NAME]
+        lhs_join_col = self.query.alias_map[alias][LHS_JOIN_COL]
+        rhs_join_col = self.query.alias_map[alias][RHS_JOIN_COL]
+        if table_name != constraint.field.rel.to._meta.db_table or \
+                rhs_join_col != constraint.field.rel.to._meta.pk.column or \
+                lhs_join_col != constraint.field.column:
+            return
+        next_alias = self.query.alias_map[alias][LHS_ALIAS]
+        if not next_alias:
+            return
+        self.unref_alias(alias)
+        alias = next_alias
+        constraint.col = constraint.field.column
+        constraint.alias = alias
 
 class SQLInsertCompiler(object):
     def execute_sql(self, return_id=False):

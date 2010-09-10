@@ -10,13 +10,13 @@ class ForeignIndexed2(models.Model):
 class ForeignIndexed(models.Model):
     title = models.CharField(max_length=500)
     name = models.CharField(max_length=500)
-    fk = models.ForeignKey(ForeignIndexed2)
+    fk = models.ForeignKey(ForeignIndexed2, null=True)
 
 class Indexed(models.Model):
     name = models.CharField(max_length=500)
     published = models.DateTimeField(auto_now_add=True)
-    foreignkey = models.ForeignKey(ForeignIndexed)
-    foreignkey2 = models.ForeignKey(ForeignIndexed2, related_name='idx_set')
+    foreignkey = models.ForeignKey(ForeignIndexed, null=True)
+    foreignkey2 = models.ForeignKey(ForeignIndexed2, related_name='idx_set', null=True)
 
 register_index(Indexed, {
     'name': ('iexact', 'endswith', 'istartswith', 'iendswith', 'contains',
@@ -53,6 +53,9 @@ class TestIndexed(TestCase):
         self.assertEqual(1, len(Indexed.objects.all().filter(
             foreignkey__title__iexact='biJuu', name__iendswith='iMe')))
 
+    def test_fix_fk_isnull(self):
+        self.assertEqual(0, len(Indexed.objects.filter(foreignkey=None)))
+        self.assertEqual(3, len(Indexed.objects.exclude(foreignkey=None)))
 
     def test_iexact(self):
         self.assertEqual(1, len(Indexed.objects.all().filter(name__iexact='itaChi')))
