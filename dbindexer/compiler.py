@@ -64,11 +64,7 @@ Constraint.__repr__ = __repr__
 # be done because the query can be reused afterwoods by the user so that a
 # manipulated query can result in strange behavior for these cases!
 
-class SQLCompiler(object):
-    def results_iter(self):
-        self.convert_filters(self.query.where)
-        return super(SQLCompiler, self).results_iter()
-
+class BaseCompiler(object):
     def get_column_index(self, constraint):
         if constraint.field:
             column_chain = constraint.field.column
@@ -167,7 +163,16 @@ class SQLCompiler(object):
         constraint.col = constraint.field.column
         constraint.alias = alias
 
-class SQLInsertCompiler(object):
+class SQLCompiler(BaseCompiler):
+    def execute_sql(self, *args, **kwargs):
+        self.convert_filters(self.query.where)
+        return super(SQLCompiler, self).execute_sql(*args, **kwargs)
+
+    def results_iter(self):
+        self.convert_filters(self.query.where)
+        return super(SQLCompiler, self).results_iter()
+
+class SQLInsertCompiler(BaseCompiler):
     def execute_sql(self, return_id=False):
         position = {}
         for index, (field, value) in enumerate(self.query.values[:]):
@@ -247,8 +252,8 @@ class SQLInsertCompiler(object):
 #        print dict((field.column, value) for field, value in self.query.values)
         return super(SQLInsertCompiler, self).execute_sql(return_id=return_id)
 
-class SQLUpdateCompiler(object):
+class SQLUpdateCompiler(BaseCompiler):
     pass
 
-class SQLDeleteCompiler(object):
+class SQLDeleteCompiler(BaseCompiler):
     pass

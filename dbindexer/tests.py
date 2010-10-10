@@ -58,7 +58,16 @@ class TestIndexed(TestCase):
         self.assertEqual(3, len(Indexed.objects.exclude(foreignkey=None)))
 
     def test_iexact(self):
-        self.assertEqual(1, len(Indexed.objects.all().filter(name__iexact='itaChi')))
+        self.assertEqual(1, len(Indexed.objects.filter(name__iexact='itaChi')))
+        self.assertEqual(1, Indexed.objects.filter(name__iexact='itaChi').count())
+
+    def test_delete(self):
+        Indexed.objects.get(name__iexact='itaChi').delete()
+        self.assertEqual(0, Indexed.objects.all().filter(name__iexact='itaChi').count())
+
+    def test_delete_query(self):
+        Indexed.objects.all().delete()
+        self.assertEqual(0, Indexed.objects.all().filter(name__iexact='itaChi').count())
 
     def test_istartswith(self):
         self.assertEqual(1, len(Indexed.objects.all().filter(name__istartswith='iTa')))
