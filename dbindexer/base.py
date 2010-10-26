@@ -16,8 +16,8 @@ class OperationsProxy(Proxy):
         self._cache = {}
 
     def compiler(self, compiler_name):
-        target = self._target.compiler(compiler_name)
         if compiler_name not in self._cache:
+            target = self._target.compiler(compiler_name)
             base = getattr(
                 import_module(self.compiler_module), compiler_name)
             class Compiler(base, target):
