@@ -188,11 +188,12 @@ class SQLInsertCompiler(BaseCompiler):
         for field, value in self.query.values[:]:
             regex_values = []
             index_keys = []
+            
             if field is None or model not in FIELD_INDEXES:
                 continue
             if field.column not in FIELD_INDEXES[model]:
-                # check for denormalization indexes, if none exist continue with
-                # next field
+                # check for denormalization indexes on the left table, if none
+                # exist continue with next field
                 denormalization_indexes = [field_index.split('__', 1)[0]
                     for field_index in FIELD_INDEXES[model].keys()]
                 if field.column not in denormalization_indexes:
@@ -200,7 +201,7 @@ class SQLInsertCompiler(BaseCompiler):
                 else:
                     for field_index in FIELD_INDEXES[model].keys():
                         # check against field column + '__' to avoid name clashes
-                        # caused by startswith i.e. field.column = foreignkey
+                        # caused by startswith() i.e. field.column = foreignkey
                         # and field2.column = foreignkey2
                         if field_index.startswith(field.column + '__'):
                             index_keys.append(field_index)

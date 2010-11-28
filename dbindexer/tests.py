@@ -5,11 +5,11 @@ from datetime import datetime
 import re
 
 class ForeignIndexed2(models.Model):
-    name = models.CharField(max_length=500)
+    name_fi2 = models.CharField(max_length=500)
     
 class ForeignIndexed(models.Model):
     title = models.CharField(max_length=500)
-    name = models.CharField(max_length=500)
+    name_fi = models.CharField(max_length=500)
     fk = models.ForeignKey(ForeignIndexed2, null=True)
 
 class Indexed(models.Model):
@@ -25,16 +25,16 @@ register_index(Indexed, {
     'published': ('month', 'day', 'week_day'),
     'foreignkey': 'iexact',
     'foreignkey__title': 'iexact',
-    'foreignkey__fk__name': 'iexact',
-    'foreignkey__name': 'iexact',
-    'foreignkey2__name': '$default'
+    'foreignkey__fk__name_fi2': 'iexact',
+    'foreignkey__name_fi': 'iexact',
+    'foreignkey2__name_fi2': '$default'
 })
 
 class TestIndexed(TestCase):
     def setUp(self):
-        juubi = ForeignIndexed2(name='Juubi')
+        juubi = ForeignIndexed2(name_fi2='Juubi')
         juubi.save()
-        kyuubi = ForeignIndexed(name='Kyuubi', title='Bijuu', fk=juubi)
+        kyuubi = ForeignIndexed(name_fi='Kyuubi', title='Bijuu', fk=juubi)
         kyuubi.save()
         Indexed(name='ItAchi', foreignkey=kyuubi, foreignkey2=juubi).save()
         Indexed(name='YondAimE', foreignkey=kyuubi, foreignkey2=juubi).save()
@@ -42,12 +42,12 @@ class TestIndexed(TestCase):
 
     def test_joins(self):
         self.assertEqual(3, len(Indexed.objects.all().filter(
-            foreignkey__fk__name__iexact='juuBi')))
+            foreignkey__fk__name_fi2__iexact='juuBi')))
         self.assertEqual(3, len(Indexed.objects.all().filter(
-            foreignkey__fk__name__iexact='juuBi',
+            foreignkey__fk__name_fi2__iexact='juuBi',
             foreignkey__title__iexact='biJuu')))
         self.assertEqual(3, len(Indexed.objects.all().filter(
-            foreignkey__name__iexact='kyuuBi', foreignkey__title__iexact='biJuu')))
+            foreignkey__name_fi__iexact='kyuuBi', foreignkey__title__iexact='biJuu')))
         self.assertEqual(3, len(Indexed.objects.all().filter(
             foreignkey__title__iexact='biJuu')))
         self.assertEqual(1, len(Indexed.objects.all().filter(

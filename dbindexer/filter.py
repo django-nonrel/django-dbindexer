@@ -2,7 +2,7 @@ from django.db import models
 from djangotoolbox.fields import ListField
 from copy import deepcopy
 
-class DenormLookup():
+class ExtraFieldLookup():
     def __init__(self, model=None, field_name=None, lookup_type=None,
             field_to_add=models.CharField(max_length=500, editable=False, null=True)):
         self.model = model
@@ -35,9 +35,9 @@ class DenormLookup():
     def convert_value(self, value):
         pass
 
-class DateLookup(DenormLookup):
+class DateLookup(ExtraFieldLookup):
     def __init__(self, model, field_name, lookup_type):
-        super(DenormLookup, self).__init__(model, field_name,
+        super(ExtraFieldLookup, self).__init__(model, field_name,
             lookup_type, models.IntegerField(editable=False, null=True))
 
     def convert_lookup(self, value, annotation):
@@ -71,17 +71,17 @@ class Weekday(DateLookup):
     def convert_value(self, value):
         return value.isoweekday()
 
-class RegexFilter(DenormLookup):
+class RegexFilter(ExtraFieldLookup):
     def __init__(self, model, field_name, regex):
         self.regex = re.compile(regex.pattern, re.S | re.U | (regex.flags & re.I))
         lookup_type = self.regex.flags & re.I and 'iregex' or 'regex'
-        super(DenormLookup, self).__init__(model, field_name,
+        super(ExtraFieldLookup, self).__init__(model, field_name,
             lookup_type, ListField(models.CharField(max_length=256),
             editable=False, null=True))
 
     def create_index(self, model):
         # TODO: only create one list field for all regexes for a given model
-        super(DenormLookup, self).create_index(model)
+        super(ExtraFieldLookup, self).create_index(model)
 
     def convert_lookup(self, value, annotation):
         return self.lookup_type == 'regex' and ('exact', ':' + value) or \
@@ -90,9 +90,9 @@ class RegexFilter(DenormLookup):
     def convert_value(self, value):
         return
 
-class Contains(DenormLookup):
+class Contains(ExtraFieldLookup):
     def __init__(self, model, field_name):
-        super(DenormLookup, self).__init__(model, field_name,
+        super(ExtraFieldLookup, self).__init__(model, field_name,
             'contains', ListField(models.CharField(500), editable=False, null=True))
 
     def convert_lookup(self, value, annotation):
@@ -105,7 +105,8 @@ class Contains(DenormLookup):
     def contains_indexer(cls, value):
         # In indexing mode we add all postfixes ('o', 'lo', ..., 'hello')
         result = []
-        result.extend([value[count:] for count in range(len(value))])
+        if value:
+            result.extend([value[count:] for count in range(len(value))])
         return result
 
 class Icontains(Contains):
@@ -119,28 +120,28 @@ class Icontains(Contains):
     def convert_value(self, value):
         return [val.lower() for val in super(Contains, self).convert_value(value)]
 
-class Iexact(DenormLookup):
+class Iexact(ExtraFieldLookup):
     def convert_lookup(self, value, annotation):
         return 'exact', value.lower()
 
     def convert_value(self, value):
         return value.lower()
 
-class Istartswith(DenormLookup):
+class Istartswith(ExtraFieldLookup):
     def convert_lookup(self, value, annotation):
         return 'startswith', value.lower()
 
     def convert_value(self, value):
         return value.lower()
 
-class Endswith(DenormLookup):
+class Endswith(ExtraFieldLookup):
     def convert_lookup(self, value, annotation):
         return 'startswith', value[::-1]
 
     def convert_value(self, value):
         return value[::-1]
 
-class Iendswith(DenormLookup):
+class Iendswith(ExtraFieldLookup):
     def convert_lookup(self, value, annotation):
         return 'startswith', value[::-1].lower()
 
