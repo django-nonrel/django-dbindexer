@@ -11,7 +11,8 @@ import re
 def contains_indexer(value):
     # In indexing mode we add all postfixes ('o', 'lo', ..., 'hello')
     result = []
-    result.extend([value[count:] for count in range(len(value))])
+    if value:
+        result.extend([value[count:] for count in range(len(value))])
     return result
 
 LOOKUP_TYPE_CONVERSION = {
