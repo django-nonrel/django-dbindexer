@@ -1,59 +1,15 @@
 from django.db import models
 from djangotoolbox.fields import ListField
 from copy import deepcopy
+from lookups import LookupDoesNotExist
+import lookups
+import inspect
 
 import re
 regex = type(re.compile(''))
 
 FIELD_INDEXES = {}
 COLUMN_TO_NAME = {}
-
-class DenormalizationFilter():
-    def __init__(self, field_name):
-        # TODO: use special field instances which implement getValue?
-        self.field_name = field_name
-        
-    def create_index(self, model):
-        field = model._meta.get_field(self.field_name)
-        # Default is to create a CharField
-        index_field = models.CharField(max_length=field.max_length or 500,
-                    editable=False, null=True)
-        model.add_to_class(index_name, index_field)
-        
-    def save(self):
-        pass
-
-class DateFilter(DenormalizationFilter):
-    @property
-    def index_name(self):
-        return 'idxf_%s_l_%s' % (self.field_name, self.__class__.__name__)
-    
-    def create_index(self, model):
-        field = model._meta.get_field(self.field_name)
-        index_field = models.IntegerField(editable=False, null=True)
-        model.add_to_class(self.index_name, index_field)
-        
-class Day(DateFilter):
-    pass
-
-class Month(DateFilter):
-    pass
-
-class Year(DateFilter):
-    pass
-        
-class Week_day(DateFilter):
-    pass
-
-class RegexFilter(DenormalizationFilter):
-    def __init__(self, field_name, regex):
-        self.regex = regex
-        super(DenormalizationFilter, self).__init__(field_name)
-        
-    @property
-    def index_name(self):
-        return 'idxf_%s_l_%s' % (self.field_name, 'regex')
-
 
 def get_index_name(field_name, lookup_type):
     if lookup_type in ('iexact', 'istartswith'):
@@ -83,6 +39,30 @@ def get_column_name(start_model, name):
 
     return column_name + denormalized_model._meta.get_field(name.split('__')[-1]).column
 
+#def create_lookup_instance(lookup_type):
+#    for cls in inspect.getmembers(lookups):
+#        if inspect.isclass(cls) and issubclass(cls, ExtraFieldLookup):
+#            cls_lookup_types = cls.lookup_type
+#            if isinstance(cls.lookup_type, basestring):
+#                cls_lookup_types = (cls.lookup_type, )
+#            if lookup_type in lookup_types:
+#                return cls()
+#            else:
+#                raise LookupDoesNotExist('No Lookup for %s found.' % lookup_type)    
+#
+#def register_index(model, mapping):
+#    for field_name, lookup_types in mapping.items():
+#        if isinstance(lookup_types, (basestring, ExtraFieldLookup)):
+#            lookup_types = (lookup_types,)
+#            
+#        # create indexes and add model and field_name to lookups
+#        # create ExtraFieldLookup instances on the fly if needed
+#        for lookup_type in lookup_types:
+#            if isinstance(lookup_type, basestring):
+#                lookup_type = create_lookup_instance(lookup_type)
+#            lookup_type.contribute(model, field_name)
+#            lookup_type.create_index()
+
 def register_index(model, mapping):
     for name, lookup_types in mapping.items():
         regex_index = False
@@ -101,10 +81,10 @@ def register_index(model, mapping):
         name = column_name
         new_lookup_types = list(lookup_types)
         for lookup_type in lookup_types:
-            lookup_type.create_index(model)
-            
-            
-            
+            # TODO: for denormalization the index_name should not contain '__'
+            index_name = get_index_name(name, lookup_type)
+            if lookup_type in ('month', 'day', 'year', 'week_day'):
+                index_field = models.IntegerField(editable=False, null=True)
             elif isinstance(lookup_type, regex):
                 lookup_type = re.compile(lookup_type.pattern, re.S | re.U |
                     (lookup_type.flags & re.I))
@@ -137,6 +117,7 @@ def register_index(model, mapping):
                 # so use 500
                 index_field = models.CharField(max_length=field.max_length or 500,
                     editable=False, null=True)
+            model.add_to_class(index_name, index_field)
 
         if denormalized_model:
             # denormalization case, for denormalized fields we append
@@ -153,78 +134,6 @@ def register_index(model, mapping):
 
         # set new lookup_types (can be different because of regex lookups)
         FIELD_INDEXES.setdefault(model, {})[name] = new_lookup_types
-
-#def register_index(model, mapping):
-#    for name, lookup_types in mapping.items():
-#        regex_index = False
-#        if isinstance(lookup_types, basestring):
-#            lookup_types = (lookup_types,)
-#
-#        denormalized_model = None
-#        if len(name.split('__', 1)) > 1:
-#            # foreign key case
-#            denormalized_model, field = get_denormalization_info(model, name)
-#        else:
-#            field = model._meta.get_field(name)
-#
-#        column_name = get_column_name(model, name)
-#        COLUMN_TO_NAME[column_name] = name
-#        name = column_name
-#        new_lookup_types = list(lookup_types)
-#        for lookup_type in lookup_types:
-#            # TODO: for denormalization the index_name should not contain '__'
-#            index_name = get_index_name(name, lookup_type)
-#            if lookup_type in ('month', 'day', 'year', 'week_day'):
-#                index_field = models.IntegerField(editable=False, null=True)
-#            elif isinstance(lookup_type, regex):
-#                lookup_type = re.compile(lookup_type.pattern, re.S | re.U |
-#                    (lookup_type.flags & re.I))
-#                # add (i)regex lookup type to map for later conversations
-#                if not lookup_type.flags & re.I and 'regex' not in new_lookup_types:
-#                    new_lookup_types.append('regex')
-#                elif lookup_type.flags & re.I and 'iregex' not in new_lookup_types:
-#                    new_lookup_types.append('iregex')
-#                # for each indexed field only add one list field shared by all
-#                # regexes
-#                if regex_index:
-#                    continue
-#                index_field = ListField(models.CharField(
-#                    max_length=256), editable=False, null=True)
-#                regex_index = True
-#            elif lookup_type == 'contains':
-#                # in the case of foreignkey we do not know which max_length to use
-#                # so use 500
-#                index_field = ListField(models.CharField(
-#                    max_length=field.max_length or 500), editable=False, null=True)
-#            elif lookup_type == '$default':
-#                # TODO: rename $default because it will be used for the field name
-#                # and not every database allows to use the sign $
-#                index_field = deepcopy(field)
-#                if isinstance(index_field, (models.DateTimeField,
-#                        models.DateField, models.TimeField)):
-#                    index_field.auto_now_add = index_field.auto_now = False
-#            else:
-#                # in the case of foreignkey we do not know which max_length to use
-#                # so use 500
-#                index_field = models.CharField(max_length=field.max_length or 500,
-#                    editable=False, null=True)
-#            model.add_to_class(index_name, index_field)
-#
-#        if denormalized_model:
-#            # denormalization case, for denormalized fields we append
-#            # 'denormalized__' to the lookup_type so dbindexer knows that it
-#            # should denormalize when saving an entity of the denormalized model
-#            denormalization_lookup_types = []
-#            for lookup_type in new_lookup_types:
-#                denormalization_lookup_types.append('denormalized__%s' % lookup_type)
-#            FIELD_INDEXES.setdefault(denormalized_model, {})
-#            if field.column not in FIELD_INDEXES[denormalized_model]:
-#                FIELD_INDEXES[denormalized_model][field.column] = denormalization_lookup_types
-#            else:
-#                FIELD_INDEXES[denormalized_model][field.column].extend(denormalization_lookup_types)
-#
-#        # set new lookup_types (can be different because of regex lookups)
-#        FIELD_INDEXES.setdefault(model, {})[name] = new_lookup_types
 
     # debug info
 #    print COLUMN_TO_NAME
