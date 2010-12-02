@@ -39,29 +39,27 @@ def get_column_name(start_model, name):
 
     return column_name + denormalized_model._meta.get_field(name.split('__')[-1]).column
 
+#FIELD_INDEXES = []
 #def create_lookup_instance(lookup_type):
 #    for cls in inspect.getmembers(lookups):
 #        if inspect.isclass(cls) and issubclass(cls, ExtraFieldLookup):
-#            cls_lookup_types = cls.lookup_type
-#            if isinstance(cls.lookup_type, basestring):
-#                cls_lookup_types = (cls.lookup_type, )
-#            if lookup_type in lookup_types:
+#            if cls.matches_lookup_def(lookup_type):
 #                return cls()
-#            else:
-#                raise LookupDoesNotExist('No Lookup for %s found.' % lookup_type)    
+#    raise LookupDoesNotExist('No Lookup for %s found.' % lookup_type)    
 #
 #def register_index(model, mapping):
 #    for field_name, lookup_types in mapping.items():
-#        if isinstance(lookup_types, (basestring, ExtraFieldLookup)):
-#            lookup_types = (lookup_types,)
+#        if not isinstance(lookup_types, (list, tuple)):
+#            lookup_types = (lookup_types, )
 #            
 #        # create indexes and add model and field_name to lookups
 #        # create ExtraFieldLookup instances on the fly if needed
 #        for lookup_type in lookup_types:
-#            if isinstance(lookup_type, basestring):
+#            if not isinstance(lookup_type, ExtraFieldLookup):
 #                lookup_type = create_lookup_instance(lookup_type)
 #            lookup_type.contribute(model, field_name)
 #            lookup_type.create_index()
+#            FIELD_INDEXES.append(lookup_type)
 
 def register_index(model, mapping):
     for name, lookup_types in mapping.items():

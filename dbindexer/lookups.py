@@ -15,6 +15,9 @@ from copy import deepcopy
     executed.
 '''
 
+import re
+regex = type(re.compile(''))
+
 class LookupDoesNotExist(Exception):
     pass
 
@@ -41,7 +44,13 @@ class ExtraFieldLookup():
         field = self.model._meta.get_field(self.field_name)
         if hasattr(field, 'max_length'):
             index_field.max_length = field.max_length
-        self.model.add_to_class(self.index_name, index_field)    
+        self.model.add_to_class(self.index_name, index_field)
+        
+    @classmethod
+    def matches_lookup_def(cls, lookup_def):
+        if lookup_def == lookup_type:
+            return True
+        return False
 
 class DateLookup(ExtraFieldLookup):
     field_to_add = models.IntegerField(editable=False, null=True)
@@ -117,6 +126,8 @@ class Icontains(Contains):
         return [val.lower() for val in Contains.convert_value(value)]
 
 class Iexact(ExtraFieldLookup):
+    lookup_type = 'iexact'
+    
     @classmethod
     def convert_lookup(cls, value, annotation):
         return 'exact', value.lower()
@@ -126,6 +137,8 @@ class Iexact(ExtraFieldLookup):
         return value.lower()
 
 class Istartswith(ExtraFieldLookup):
+    lookup_type = 'istartswith'
+    
     @classmethod
     def convert_lookup(cls, value, annotation):
         return 'startswith', value.lower()
@@ -135,6 +148,8 @@ class Istartswith(ExtraFieldLookup):
         return value.lower()
 
 class Endswith(ExtraFieldLookup):
+    lookup_type = 'endswith'
+    
     @classmethod
     def convert_lookup(cls, value, annotation):
         return 'startswith', value[::-1]
@@ -144,6 +159,8 @@ class Endswith(ExtraFieldLookup):
         return value[::-1]
 
 class Iendswith(ExtraFieldLookup):
+    lookup_type = 'iendswith'
+    
     @classmethod
     def convert_lookup(cls, value, annotation):
         return 'startswith', value[::-1].lower()
@@ -156,14 +173,17 @@ class RegexLookup(ExtraFieldLookup):
     lookup_type = ('regex', 'iregex') 
     field_to_add = ListField(models.CharField(max_length=256), editable=False,
                              null=True)
-    
-    def create_index(self):
-        index_field = deepcopy(self.field_to_add)
-        self.model.add_to_class(self.index_name, index_field)
+    models_with_extra_field = []
     
     def __init__(self, model, field_name, regex):
         self.regex = re.compile(regex.pattern, re.S | re.U | (regex.flags & re.I))
-
+    
+    def create_index(self):
+        if model not in self.models_with_extra_field:
+            index_field = deepcopy(self.field_to_add)
+            self.model.add_to_class(self.index_name, index_field)
+            self.models_with_extra_field.append(model)
+    
     @classmethod
     def convert_lookup(cls, value, annotation):
         return self.lookup_type == 'regex' and ('exact', ':' + value) or \
@@ -172,6 +192,12 @@ class RegexLookup(ExtraFieldLookup):
     @classmethod
     def convert_value(cls, value):
         return
+    
+    @classmethod
+    def matches_lookup_def(cls, lookup_def):
+        if isinstance(lookup_def, regex):
+            return True
+        return False
 
 # used for JOINs
 class StandardLookup(ExtraFieldLookup):
