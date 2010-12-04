@@ -1,10 +1,12 @@
 from django.db import models
 from djangotoolbox.fields import ListField
-from copy import deepcopy
+from resolver import resolver
+from copy import deepcopy 
 
 ''' Three layers:
 1. Adding fields
-    Instances of ExtraFieldLookup do add extra fields to the model if needed.
+    Instances of ExtraFieldLookup (or subclasses) do add extra fields to the
+    model if needed.
     
 2. Saving to extra fields
     Instances of ExtraFieldLookup do ask the resolver to get the value for (a) given
@@ -21,93 +23,145 @@ regex = type(re.compile(''))
 class LookupDoesNotExist(Exception):
     pass
 
-class ExtraFieldLookup():
-    lookup_type = None
-    field_to_add = models.CharField(max_length=500, editable=False, null=True)
+class LookupBase(type):
+    def __new__(cls, name, bases, attrs):
+        new_cls = type.__new__(cls, name, bases, attrs)
+        if not isinstance(new_cls.lookup_types, (list, tuple)):
+            new_cls.lookup_types = (new_cls.lookup_types, )
+        return new_cls 
+
+
+class ExtraFieldLookup(object):
+    '''Default is to behave like an exact filter on an ExtraField.'''
+    __metaclass__ = LookupBase
+    lookup_types = 'exact'
     
-    def __init__(self, model=None, field_name=None):
-        self.contribute(model, field_name)
+    def __init__(self, model=None, field_name=None, lookup_def=None,
+            field_to_add=models.CharField(max_length=500, editable=False,
+                                          null=True)):
+        self.field_to_add = field_to_add
+        self.contribute(model, field_name, lookup_def)
         
-    def contribute(self, model, field_name):
+    def contribute(self, model, field_name, lookup_def):
         self.model = model
         self.field_name = field_name
+        self.lookup_def = lookup_def
         self.column_name = None
         if model and field_name:
             self.column_name = model._meta.get_field(self.field_name).column
-
+            
     @property
     def index_name(self):
-        return 'idxf_%s_l_%s' % (self.column_name, self.lookup_type)
+        return 'idxf_%s_l_%s' % (self.column_name, self.lookup_types[0])
 
     def create_index(self):
-        index_field = deepcopy(self.field_to_add)
-        field = self.model._meta.get_field(self.field_name)
-        if hasattr(field, 'max_length'):
-            index_field.max_length = field.max_length
-        self.model.add_to_class(self.index_name, index_field)
+        field_to_index = resolver.get_field_to_index(self.model, self.field_name)
+        self.index_field = deepcopy(self.field_to_add)
+        if hasattr(field_to_index, 'max_length'):
+            self.index_field.max_length = field_to_index.max_length
+        self.model.add_to_class(self.index_name, self.index_field)
         
     @classmethod
     def matches_lookup_def(cls, lookup_def):
-        if lookup_def == lookup_type:
+        if lookup_def in cls.lookup_types:
             return True
         return False
+    
+    def convert_lookup(self, value, annotation):
+        return 'exact', value
+    
+    def convert_value(self, value):
+        return value
+    
+    def get_query_position(self, query):
+        for index, (field, query_value) in enumerate(query.values[:]):
+            if field is self.index_field:
+                return index
+        return None
+        
+    def convert_query(self, query):
+        position = self.get_query_position(query)
+        if position is None:
+            return
+        
+        value = resolver.get_value(self.model, self.field_name, query)
+        value = self.convert_value(value)
+        query.values[position] = (self.index_field, value)
+        return query
+    
+    def convert_filter(self, query, filters, child, index):
+        if not self.matches_filter(query, child, index):
+            return 
+        
+        constraint, lookup_type, annotation, value = child
+        lookup_type, value = self.convert_lookup(value, annotation)
+        constraint.field = query.get_meta().get_field(self.index_name)
+        constraint.col = constraint.field.column
+        child = (constraint, lookup_type, annotation, value)
+        filters.children[index] = child
+    
+    def matches_filter(self, query, child, index):
+        constraint, lookup_type, annotation, value = child
+        return self.model == query.model and lookup_type in self.lookup_types \
+            and constraint.field.column == self.column_name
 
 class DateLookup(ExtraFieldLookup):
-    field_to_add = models.IntegerField(editable=False, null=True)
+    def __init__(self, *args, **kwargs):
+        defaults = {'field_to_add': models.IntegerField(editable=False, null=True)}
+        defaults.update(kwargs)
+        ExtraFieldLookup.__init__(self, *args, **defaults)
     
-    @classmethod
-    def convert_lookup(cls, value, annotation):
+    def convert_lookup(self, value, annotation):
         return 'exact', value
 
 class Day(DateLookup):
-    lookup_type = 'day'
-
-    @classmethod
-    def convert_value(cls, value):
+    lookup_types = 'day'
+    
+    def convert_value(self, value):
         return value.day
 
 class Month(DateLookup):
-    lookup_type = 'month'
-
-    @classmethod
-    def convert_value(cls, value):
+    lookup_types = 'month'
+    
+    def convert_value(self, value):
         return value.month
 
 class Year(DateLookup):
-    lookup_type = 'year'
+    lookup_types = 'year'
 
-    @classmethod
-    def convert_value(cls, value):
+    def convert_value(self, value):
         return value.year
 
 class Weekday(DateLookup):
-    lookup_type = 'week_day'
-
-    @classmethod
-    def convert_value(cls, value):
+    lookup_types = 'week_day'
+    
+    def convert_value(self, value):
         return value.isoweekday()
 
 class Contains(ExtraFieldLookup):
-    lookup_type = 'contains'
-    field_to_add = ListField(models.CharField(500), editable=False, null=True)
-    
+    lookup_types = 'contains'
+
+    def __init__(self, *args, **kwargs):
+        defaults = {'field_to_add': ListField(models.CharField(500),
+                                              editable=False, null=True)
+        }
+        defaults.update(kwargs)
+        ExtraFieldLookup.__init__(self, *args, **defaults)
+            
     def create_index(self):
-        index_field = deepcopy(self.field_to_add)
-        field = self.model._meta.get_field(self.field_name)
-        if hasattr(field, 'max_length'):
-            index_field.item_field.max_length = field.max_length
-        self.model.add_to_class(self.index_name, index_field)
+        field_to_index = resolver.get_field_to_index(self.model, self.field_name)
+        self.index_field = deepcopy(self.field_to_add)
+        if hasattr(field_to_index, 'max_length'):
+            self.index_field.item_field.max_length = field_to_index.max_length
+        self.model.add_to_class(self.index_name, self.index_field)
     
-    @classmethod
-    def convert_lookup(cls, value, annotation):
+    def convert_lookup(self, value, annotation):
         return 'startswith', value
 
-    @classmethod
-    def convert_value(cls, value):
-        return cls.contains_indexer(value)
+    def convert_value(self, value):
+        return self.contains_indexer(value)
 
-    @classmethod
-    def contains_indexer(cls, value):
+    def contains_indexer(self, value):
         # In indexing mode we add all postfixes ('o', 'lo', ..., 'hello')
         result = []
         if value:
@@ -115,95 +169,103 @@ class Contains(ExtraFieldLookup):
         return result
 
 class Icontains(Contains):
-    lookup_type = 'icontains'
+    lookup_types = 'icontains'
     
-    @classmethod
-    def convert_lookup(cls, value, annotation):
+    def convert_lookup(self, value, annotation):
         return 'startswith', value.lower()
 
-    @classmethod
-    def convert_value(cls, value):
-        return [val.lower() for val in Contains.convert_value(value)]
+    def convert_value(self, value):
+        return [val.lower() for val in Contains.convert_value(self, value)]
 
 class Iexact(ExtraFieldLookup):
-    lookup_type = 'iexact'
+    lookup_types = 'iexact'
     
-    @classmethod
-    def convert_lookup(cls, value, annotation):
+    def convert_lookup(self, value, annotation):
         return 'exact', value.lower()
     
-    @classmethod
-    def convert_value(cls, value):
+    def convert_value(self, value):
         return value.lower()
 
 class Istartswith(ExtraFieldLookup):
-    lookup_type = 'istartswith'
+    lookup_types = 'istartswith'
     
-    @classmethod
-    def convert_lookup(cls, value, annotation):
+    def convert_lookup(self, value, annotation):
         return 'startswith', value.lower()
 
-    @classmethod
-    def convert_value(cls, value):
+    def convert_value(self, value):
         return value.lower()
 
 class Endswith(ExtraFieldLookup):
-    lookup_type = 'endswith'
+    lookup_types = 'endswith'
     
-    @classmethod
-    def convert_lookup(cls, value, annotation):
+    def convert_lookup(self, value, annotation):
         return 'startswith', value[::-1]
 
-    @classmethod
-    def convert_value(cls, value):
+    def convert_value(self, value):
         return value[::-1]
 
 class Iendswith(ExtraFieldLookup):
-    lookup_type = 'iendswith'
+    lookup_types = 'iendswith'
     
-    @classmethod
-    def convert_lookup(cls, value, annotation):
+    def convert_lookup(self, value, annotation):
         return 'startswith', value[::-1].lower()
 
-    @classmethod
-    def convert_value(cls, value):
+    def convert_value(self, value):
         return value[::-1].lower()
 
 class RegexLookup(ExtraFieldLookup):
-    lookup_type = ('regex', 'iregex') 
-    field_to_add = ListField(models.CharField(max_length=256), editable=False,
-                             null=True)
-    models_with_extra_field = []
+    lookup_types = ('regex', 'iregex')
+    ref_count = 0
     
-    def __init__(self, model, field_name, regex):
-        self.regex = re.compile(regex.pattern, re.S | re.U | (regex.flags & re.I))
+    def __init__(self, *args, **kwargs):
+        defaults = {'field_to_add': models.NullBooleanField(editable=False,
+                                                            null=True) 
+        }
+        defaults.update(kwargs)
+        ExtraFieldLookup.__init__(self, *args, **defaults)        
+    
+    def contribute(self, model, field_name, lookup_def):
+        ExtraFieldLookup.contribute(self, model, field_name, lookup_def)
+        if isinstance(lookup_def, regex):
+            self.lookup_def = re.compile(lookup_def.pattern, re.S | re.U |
+                                         (lookup_def.flags & re.I))
+    
+    @property
+    def index_name(self):
+        return 'idxf_%s_l_%s_%d' % (self.column_name, self.lookup_types[0],
+                                    self.ref_count)
     
     def create_index(self):
-        if model not in self.models_with_extra_field:
-            index_field = deepcopy(self.field_to_add)
-            self.model.add_to_class(self.index_name, index_field)
-            self.models_with_extra_field.append(model)
+        self.ref_count = RegexLookup.ref_count
+        RegexLookup.ref_count += 1 
+        ExtraFieldLookup.create_index(self)
     
-    @classmethod
-    def convert_lookup(cls, value, annotation):
-        return self.lookup_type == 'regex' and ('exact', ':' + value) or \
-            ('exact', 'i:' + value)
+    def is_icase(self):
+        return self.lookup_def.flags & re.I
+    
+    def convert_lookup(self, value, annotation):
+        return 'exact', True
 
-    @classmethod
-    def convert_value(cls, value):
-        return
-    
+    def convert_value(self, value):
+        if self.lookup_def.match(value):
+            return True
+        return False
+            
     @classmethod
     def matches_lookup_def(cls, lookup_def):
         if isinstance(lookup_def, regex):
             return True
         return False
+    
+    def matches_filter(self, query, child, index):
+        constraint, lookup_type, annotation, value = child
+        return self.model == query.model and lookup_type == \
+                '%sregex' % ('i' if self.is_icase() else '') and \
+                value == self.lookup_def.pattern and \
+                constraint.field.column == self.column_name 
 
 # used for JOINs
-class StandardLookup(ExtraFieldLookup):
-    def __init__(self):
-        # to get the field type for a JOIN definition
-        self.join_resolver = JOINResolver
-        
-    
-    
+#class StandardLookup(ExtraFieldLookup):
+#    def __init__(self):
+#        # to get the field type for a JOIN definition
+#        self.join_resolver = JOINResolver

@@ -1,33 +1,42 @@
 from django.db.models.fields import FieldDoesNotExist
+from django.conf import settings
+from django.utils.importlib import import_module
+from django.core.exceptions import ImproperlyConfigured
 
-# the backend
 class Resolver(object):
 	def __init__(self):
-		pass
+		self.backends = []
+		for backend in settings.DBINDEXER_BACKENDS:
+			self.backends.append(self.load_backend(backend))
+	
+	def load_backend(self, path):
+	    module_name, attr_name = path.rsplit('.', 1)
+	    try:
+	        mod = import_module(module_name)
+	    except (ImportError, ValueError), e:
+	        raise ImproperlyConfigured('Error importing backend module %s: "%s"' % (module_name, e))
+	    try:
+	        cls = getattr(mod, attr_name)
+	        return cls()
+	    except AttributeError:
+	        raise ImproperlyConfigured('Module "%s" does not define a "%s" backend' % (module_name, attr_name))
+	
+	def get_field_to_index(self, model, field_name):
+		for backend in self.backends:
+			try:
+				return backend.get_field_to_index(model, field_name)
+			except:
+				continue
+		raise FieldDoesNotExist('Cannot find field %s for model %s.'
+                                % (field_name, model.__name__))
 		
-	def get_value(self, model, field_name, lookup_type):
-		pass
-	
-class StandardResolver(Resolver):
-	def get_value(self, model, field_name, lookup_type):
-		try:
-			return model._meta.get_field(name)
-		except FieldDoesNotExist:
-			return None	
-			
-class JOINResolver(Resolver):
-	def get_value(self, model, field_name, lookup_type):
-		if field_name.contains('__'):
-			value = get_denormalization_value(model, field_name, foreign_key_pk)
-		try:
-			return model._meta.get_field(name)
-		except FieldDoesNotExist:
-			return None		
-	
-	def get_denormalization_value(start_model, index_key, foreignkey_pk):
-	    denormalized_model = start_model._meta.get_field(
-			index_key.split('__')[0]).rel.to
-	    foreignkey = denormalized_model.objects.all().get(pk=foreignkey_pk)
-	    for value in index_key.split('__')[1:-1]:
-	        foreignkey = getattr(foreignkey, value)
-    	return getattr(foreignkey, index_key.split('__')[-1])
+	def get_value(self, model, field_name, query):
+		for backend in self.backends:
+			try:
+				return backend.get_value(model, field_name, query)
+			except:
+				continue
+		raise FieldDoesNotExist('Cannot find field %s for model %s in query.'
+                                % (field_name, model.__name__))
+
+resolver = Resolver()
