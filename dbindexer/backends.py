@@ -1,4 +1,7 @@
 class BaseResolver(object):
+    def __init__(self):
+        self.lookups = []
+        
     def get_field_to_index(self, model, field_name):
         try:
             return model._meta.get_field(field_name)
@@ -12,6 +15,23 @@ class BaseResolver(object):
             if field_to_index == query_field:
                 return value
         raise FieldDoesNotExist('Cannot find field in query.')
+    
+    def convert_filter(self, query, filters, child, index):
+        for lookup in self.lookups:
+            if lookup.matches_filter(query, child, index):
+                constraint, lookup_type, annotation, value = child
+                lookup_type, value = lookup.convert_lookup(value, annotation)
+                constraint.field = query.get_meta().get_field(lookup.index_name)
+                constraint.col = constraint.field.column
+                child = (constraint, lookup_type, annotation, value)
+                filters.children[index] = child
+    
+    def get_query_position(self, query):
+        for index, (field, query_value) in enumerate(query.values[:]):
+            if field is self.index_field:
+                return index
+        return None
+    
             
 # TODO: JOIN backend should be configurable per field i.e. in-memory or immutable
 class JOINResolver(BaseResolver):

@@ -3,6 +3,7 @@
 #from copy import deepcopy
 from lookups import LookupDoesNotExist, ExtraFieldLookup
 import lookups as lookups_module
+from resolver import resolver
 import inspect
 
 FIELD_INDEXES = []
@@ -26,6 +27,7 @@ def register_index(model, mapping):
                 lookup = create_lookup(lookup_def)
             lookup.contribute(model, field_name, lookup_def)
             lookup.create_index()
+            resolver.create_index(lookup)
             FIELD_INDEXES.append(lookup)
 
 #import re

@@ -89,17 +89,6 @@ class ExtraFieldLookup(object):
         query.values[position] = (self.index_field, value)
         return query
     
-    def convert_filter(self, query, filters, child, index):
-        if not self.matches_filter(query, child, index):
-            return 
-        
-        constraint, lookup_type, annotation, value = child
-        lookup_type, value = self.convert_lookup(value, annotation)
-        constraint.field = query.get_meta().get_field(self.index_name)
-        constraint.col = constraint.field.column
-        child = (constraint, lookup_type, annotation, value)
-        filters.children[index] = child
-    
     def matches_filter(self, query, child, index):
         constraint, lookup_type, annotation, value = child
         return self.model == query.model and lookup_type in self.lookup_types \

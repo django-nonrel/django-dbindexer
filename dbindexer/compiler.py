@@ -6,6 +6,7 @@ from .api import FIELD_INDEXES#, COLUMN_TO_NAME, get_index_name, get_column_name
 #from django.db.models.sql.where import AND, OR
 #from django.db.utils import DatabaseError, IntegrityError
 from django.utils.tree import Node
+from resolver import resolver
 #import re
 
 #def contains_indexer(value):
@@ -178,8 +179,9 @@ class BaseCompiler(object):
             constraint, lookup_type, annotation, value = child
             if constraint.field is not None and constraint.alias \
                     == self.query.table_map[model._meta.db_table][0]:
-                for lookup in FIELD_INDEXES:
-                    lookup.convert_filter(self.query, filters, child, index)
+                resolver.convert_filter(self.query, filters, child, index)
+#                for lookup in FIELD_INDEXES:
+#                    lookup.convert_filter(self.query, filters, child, index)
 
 class SQLCompiler(BaseCompiler):
     def execute_sql(self, *args, **kwargs):

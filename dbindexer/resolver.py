@@ -6,6 +6,7 @@ from django.core.exceptions import ImproperlyConfigured
 class Resolver(object):
 	def __init__(self):
 		self.backends = []
+		self.lookups = []
 		for backend in settings.DBINDEXER_BACKENDS:
 			self.backends.append(self.load_backend(backend))
 	
@@ -38,5 +39,16 @@ class Resolver(object):
 				continue
 		raise FieldDoesNotExist('Cannot find field %s for model %s in query.'
                                 % (field_name, model.__name__))
+	
+	def convert_filter(self, query, filters, child, index):
+		for backend in self.backends:
+			try:
+				return backend.convert_filter(query, filters, child, index)
+			except:
+				continue
+			
+	def create_index(self, lookup):
+		for backend in self.backends:
+			backend.lookups.append(lookup)
 
 resolver = Resolver()
