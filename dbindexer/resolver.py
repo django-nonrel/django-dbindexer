@@ -21,16 +21,7 @@ class Resolver(object):
 	        return cls()
 	    except AttributeError:
 	        raise ImproperlyConfigured('Module "%s" does not define a "%s" backend' % (module_name, attr_name))
-	
-	def get_field_to_index(self, model, field_name):
-		for backend in self.backends:
-			try:
-				return backend.get_field_to_index(model, field_name)
-			except:
-				continue
-		raise FieldDoesNotExist('Cannot find field %s for model %s.'
-                                % (field_name, model.__name__))
-		
+			
 	def get_value(self, model, field_name, query):
 		for backend in self.backends:
 			try:
@@ -49,6 +40,9 @@ class Resolver(object):
 			
 	def create_index(self, lookup):
 		for backend in self.backends:
-			backend.lookups.append(lookup)
+			try:
+				return backend.create_index(lookup)
+			except:
+				continue
 
 resolver = Resolver()

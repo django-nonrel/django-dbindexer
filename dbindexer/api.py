@@ -26,7 +26,6 @@ def register_index(model, mapping):
                 lookup_def = lookup
                 lookup = create_lookup(lookup_def)
             lookup.contribute(model, field_name, lookup_def)
-            lookup.create_index()
             resolver.create_index(lookup)
             FIELD_INDEXES.append(lookup)
 

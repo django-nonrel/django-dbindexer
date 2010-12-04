@@ -1,3 +1,7 @@
+from django.db import models
+from djangotoolbox.fields import ListField
+from copy import deepcopy
+
 class BaseResolver(object):
     def __init__(self):
         self.lookups = []
@@ -25,6 +29,20 @@ class BaseResolver(object):
                 constraint.col = constraint.field.column
                 child = (constraint, lookup_type, annotation, value)
                 filters.children[index] = child
+    
+    def create_index(self, lookup):
+        field_to_index = self.get_field_to_index(lookup.model, lookup.field_name)
+        # TODO: move index_field out of lookup
+        lookup.index_field = deepcopy(lookup.field_to_add)
+        
+        config_field = lookup.index_field.item_field if \
+            isinstance(lookup.index_field, ListField) else lookup.index_field  
+        if hasattr(field_to_index, 'max_length') and \
+                isinstance(config_field, models.CharField):
+            config_field.max_length = field_to_index.max_length
+            
+        lookup.model.add_to_class(lookup.index_name, lookup.index_field)
+        self.lookups.append(lookup)
     
     def get_query_position(self, query):
         for index, (field, query_value) in enumerate(query.values[:]):

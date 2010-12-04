@@ -40,6 +40,7 @@ class ExtraFieldLookup(object):
             field_to_add=models.CharField(max_length=500, editable=False,
                                           null=True)):
         self.field_to_add = field_to_add
+        self.index_field = None
         self.contribute(model, field_name, lookup_def)
         
     def contribute(self, model, field_name, lookup_def):
@@ -54,13 +55,6 @@ class ExtraFieldLookup(object):
     def index_name(self):
         return 'idxf_%s_l_%s' % (self.column_name, self.lookup_types[0])
 
-    def create_index(self):
-        field_to_index = resolver.get_field_to_index(self.model, self.field_name)
-        self.index_field = deepcopy(self.field_to_add)
-        if hasattr(field_to_index, 'max_length'):
-            self.index_field.max_length = field_to_index.max_length
-        self.model.add_to_class(self.index_name, self.index_field)
-        
     @classmethod
     def matches_lookup_def(cls, lookup_def):
         if lookup_def in cls.lookup_types:
@@ -136,13 +130,6 @@ class Contains(ExtraFieldLookup):
         }
         defaults.update(kwargs)
         ExtraFieldLookup.__init__(self, *args, **defaults)
-            
-    def create_index(self):
-        field_to_index = resolver.get_field_to_index(self.model, self.field_name)
-        self.index_field = deepcopy(self.field_to_add)
-        if hasattr(field_to_index, 'max_length'):
-            self.index_field.item_field.max_length = field_to_index.max_length
-        self.model.add_to_class(self.index_name, self.index_field)
     
     def convert_lookup(self, value, annotation):
         return 'startswith', value
@@ -204,7 +191,6 @@ class Iendswith(ExtraFieldLookup):
 
 class RegexLookup(ExtraFieldLookup):
     lookup_types = ('regex', 'iregex')
-    ref_count = 0
     
     def __init__(self, *args, **kwargs):
         defaults = {'field_to_add': models.NullBooleanField(editable=False,
@@ -221,14 +207,9 @@ class RegexLookup(ExtraFieldLookup):
     
     @property
     def index_name(self):
-        return 'idxf_%s_l_%s_%d' % (self.column_name, self.lookup_types[0],
-                                    self.ref_count)
-    
-    def create_index(self):
-        self.ref_count = RegexLookup.ref_count
-        RegexLookup.ref_count += 1 
-        ExtraFieldLookup.create_index(self)
-    
+        # TODO: use different naming
+        return 'idxf_%s_l_%s' % (self.column_name, self.lookup_def.pattern)
+
     def is_icase(self):
         return self.lookup_def.flags & re.I
     
