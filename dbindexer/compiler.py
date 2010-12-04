@@ -1,4 +1,4 @@
-from .api import FIELD_INDEXES#, COLUMN_TO_NAME, get_index_name, get_column_name, regex
+#from .api import FIELD_INDEXES, COLUMN_TO_NAME, get_index_name, get_column_name, regex
 #from django.db import models
 #from django.db.models.sql import aggregates as sqlaggregates
 #from django.db.models.sql.constants import LOOKUP_SEP, MULTI, SINGLE, LHS_ALIAS,\
@@ -180,8 +180,6 @@ class BaseCompiler(object):
             if constraint.field is not None and constraint.alias \
                     == self.query.table_map[model._meta.db_table][0]:
                 resolver.convert_filter(self.query, filters, child, index)
-#                for lookup in FIELD_INDEXES:
-#                    lookup.convert_filter(self.query, filters, child, index)
 
 class SQLCompiler(BaseCompiler):
     def execute_sql(self, *args, **kwargs):
@@ -195,11 +193,7 @@ class SQLCompiler(BaseCompiler):
 
 class SQLInsertCompiler(BaseCompiler):
     def execute_sql(self, return_id=False):
-        # then actually convert the query
-        for lookup in FIELD_INDEXES:
-            if lookup.model == self.query.model:
-                lookup.convert_query(self.query)
-        
+        resolver.convert_query(self.query)
         return super(SQLInsertCompiler, self).execute_sql(return_id=return_id)
             
 #class SQLInsertCompiler(BaseCompiler):

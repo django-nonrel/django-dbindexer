@@ -6,7 +6,6 @@ import lookups as lookups_module
 from resolver import resolver
 import inspect
 
-FIELD_INDEXES = []
 def create_lookup(lookup_def):
     for _, cls in inspect.getmembers(lookups_module):
         if inspect.isclass(cls) and issubclass(cls, ExtraFieldLookup) and \
@@ -27,7 +26,6 @@ def register_index(model, mapping):
                 lookup = create_lookup(lookup_def)
             lookup.contribute(model, field_name, lookup_def)
             resolver.create_index(lookup)
-            FIELD_INDEXES.append(lookup)
 
 #import re
 #regex = type(re.compile(''))

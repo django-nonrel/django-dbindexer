@@ -54,39 +54,23 @@ class ExtraFieldLookup(object):
     @property
     def index_name(self):
         return 'idxf_%s_l_%s' % (self.column_name, self.lookup_types[0])
-
-    @classmethod
-    def matches_lookup_def(cls, lookup_def):
-        if lookup_def in cls.lookup_types:
-            return True
-        return False
     
     def convert_lookup(self, value, annotation):
         return 'exact', value
     
     def convert_value(self, value):
         return value
-    
-    def get_query_position(self, query):
-        for index, (field, query_value) in enumerate(query.values[:]):
-            if field is self.index_field:
-                return index
-        return None
         
-    def convert_query(self, query):
-        position = self.get_query_position(query)
-        if position is None:
-            return
-        
-        value = resolver.get_value(self.model, self.field_name, query)
-        value = self.convert_value(value)
-        query.values[position] = (self.index_field, value)
-        return query
-    
     def matches_filter(self, query, child, index):
         constraint, lookup_type, annotation, value = child
         return self.model == query.model and lookup_type in self.lookup_types \
             and constraint.field.column == self.column_name
+    
+    @classmethod
+    def matches_lookup_def(cls, lookup_def):
+        if lookup_def in cls.lookup_types:
+            return True
+        return False
 
 class DateLookup(ExtraFieldLookup):
     def __init__(self, *args, **kwargs):
@@ -220,19 +204,19 @@ class RegexLookup(ExtraFieldLookup):
         if self.lookup_def.match(value):
             return True
         return False
-            
-    @classmethod
-    def matches_lookup_def(cls, lookup_def):
-        if isinstance(lookup_def, regex):
-            return True
-        return False
-    
+        
     def matches_filter(self, query, child, index):
         constraint, lookup_type, annotation, value = child
         return self.model == query.model and lookup_type == \
                 '%sregex' % ('i' if self.is_icase() else '') and \
                 value == self.lookup_def.pattern and \
-                constraint.field.column == self.column_name 
+                constraint.field.column == self.column_name
+    
+    @classmethod
+    def matches_lookup_def(cls, lookup_def):
+        if isinstance(lookup_def, regex):
+            return True
+        return False 
 
 # used for JOINs
 #class StandardLookup(ExtraFieldLookup):

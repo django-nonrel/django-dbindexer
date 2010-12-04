@@ -44,12 +44,24 @@ class BaseResolver(object):
         lookup.model.add_to_class(lookup.index_name, lookup.index_field)
         self.lookups.append(lookup)
     
-    def get_query_position(self, query):
+    def get_query_position(self, query, lookup):
         for index, (field, query_value) in enumerate(query.values[:]):
-            if field is self.index_field:
+            if field is lookup.index_field:
                 return index
         return None
     
+    def convert_query(self, query):
+        for lookup in self.lookups:
+            if not lookup.model == query.model:
+                continue
+            
+            position = self.get_query_position(query, lookup)
+            if position is None:
+                return
+            
+            value = self.get_value(lookup.model, lookup.field_name, query)
+            value = lookup.convert_value(value)
+            query.values[position] = (lookup.index_field, value)
             
 # TODO: JOIN backend should be configurable per field i.e. in-memory or immutable
 class JOINResolver(BaseResolver):

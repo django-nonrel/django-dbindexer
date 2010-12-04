@@ -44,5 +44,12 @@ class Resolver(object):
 				return backend.create_index(lookup)
 			except:
 				continue
+	
+	def convert_query(self, query):
+		for backend in self.backends:
+			try:
+				return backend.convert_query(query)
+			except:
+				continue
 
 resolver = Resolver()
