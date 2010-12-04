@@ -40,7 +40,6 @@ class ExtraFieldLookup(object):
             field_to_add=models.CharField(max_length=500, editable=False,
                                           null=True)):
         self.field_to_add = field_to_add
-        self.index_field = None
         self.contribute(model, field_name, lookup_def)
         
     def contribute(self, model, field_name, lookup_def):

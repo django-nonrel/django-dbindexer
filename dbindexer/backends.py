@@ -4,7 +4,8 @@ from copy import deepcopy
 
 class BaseResolver(object):
     def __init__(self):
-        self.lookups = []
+        # mapping from lookups to indexes
+        self.index_map = {}
         
     def get_field_to_index(self, model, field_name):
         try:
@@ -21,7 +22,7 @@ class BaseResolver(object):
         raise FieldDoesNotExist('Cannot find field in query.')
     
     def convert_filter(self, query, filters, child, index):
-        for lookup in self.lookups:
+        for lookup in self.index_map.keys():
             if lookup.matches_filter(query, child, index):
                 constraint, lookup_type, annotation, value = child
                 lookup_type, value = lookup.convert_lookup(value, annotation)
@@ -32,26 +33,28 @@ class BaseResolver(object):
     
     def create_index(self, lookup):
         field_to_index = self.get_field_to_index(lookup.model, lookup.field_name)
-        # TODO: move index_field out of lookup
-        lookup.index_field = deepcopy(lookup.field_to_add)
+        index_field = deepcopy(lookup.field_to_add)
         
-        config_field = lookup.index_field.item_field if \
-            isinstance(lookup.index_field, ListField) else lookup.index_field  
+        config_field = index_field.item_field if \
+            isinstance(index_field, ListField) else index_field  
         if hasattr(field_to_index, 'max_length') and \
                 isinstance(config_field, models.CharField):
             config_field.max_length = field_to_index.max_length
             
-        lookup.model.add_to_class(lookup.index_name, lookup.index_field)
-        self.lookups.append(lookup)
+        lookup.model.add_to_class(lookup.index_name, index_field)
+        self.index_map[lookup] = index_field
+    
+    def get_index(self, lookup):
+        return self.index_map[lookup]
     
     def get_query_position(self, query, lookup):
         for index, (field, query_value) in enumerate(query.values[:]):
-            if field is lookup.index_field:
+            if field is self.get_index(lookup):
                 return index
         return None
     
     def convert_query(self, query):
-        for lookup in self.lookups:
+        for lookup in self.index_map.keys():
             if not lookup.model == query.model:
                 continue
             
@@ -61,7 +64,7 @@ class BaseResolver(object):
             
             value = self.get_value(lookup.model, lookup.field_name, query)
             value = lookup.convert_value(value)
-            query.values[position] = (lookup.index_field, value)
+            query.values[position] = (self.get_index(lookup), value)
             
 # TODO: JOIN backend should be configurable per field i.e. in-memory or immutable
 class JOINResolver(BaseResolver):

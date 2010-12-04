@@ -6,7 +6,6 @@ from django.core.exceptions import ImproperlyConfigured
 class Resolver(object):
 	def __init__(self):
 		self.backends = []
-		self.lookups = []
 		for backend in settings.DBINDEXER_BACKENDS:
 			self.backends.append(self.load_backend(backend))
 	
