@@ -161,10 +161,15 @@ class JOINResolver(BaseResolver):
             return
         
         column_index = self.get_column_index(query, constraint)
+        field_name = self.column_to_name.get(column_index)
+        
+        if field_name is None:
+            return
+        print self.index_map, column_index, field_name
         for lookup in self.index_map.keys():
-            if lookup.matches_filter(query.model, column_index, lookup_type,
+            if lookup.matches_filter(query.model, field_name, lookup_type,
                                      value):
-                self.resolve_join(lookup, query, filters, index, column_index)
+                self.resolve_join(lookup, query, filters, child, index)
     
     def get_field_to_index(self, model, field_name):
         model = self.get_model_chain(model, field_name)[-1]
@@ -198,8 +203,8 @@ class JOINResolver(BaseResolver):
         model_chain = self.get_model_chain(model, field_name)
         column_chain = ''
         field_names = field_name.split('__')
-        for model, field_name in zip(model_chain, field_names):
-            column_chain += model._meta.get_field(field_name).column + '__'
+        for model, name in zip(model_chain, field_names):
+            column_chain += model._meta.get_field(name).column + '__'
         self.column_to_name[column_chain[:-2]] = field_name
         
     def unref_alias(self, query, alias):
@@ -218,7 +223,7 @@ class JOINResolver(BaseResolver):
                     alias = None
         return '__'.join(reversed(column_chain.split('__')))
 
-    def resolve_join(self, lookup, query, filters, index, column_index):
+    def resolve_join(self, lookup, query, filters, child, index):
         constraint, lookup_type, annotation, value = child
         if not constraint.field:
             return
@@ -231,19 +236,5 @@ class JOINResolver(BaseResolver):
             self.unref_alias(query, alias)
             alias = next_alias
         
-        index_name = get_index_name(column_index, lookup_type)
-        lookup_type, value = LOOKUP_TYPE_CONVERSION[lookup_type](value,
-            annotation)
         constraint.alias = alias
-        constraint.field = self.query.get_meta().get_field(index_name)
-        constraint.col = constraint.field.column
-        child = (constraint, lookup_type, annotation, value)
-        filters.children[index] = child
-    
-#        def _convert_filter(self, lookup, query, filters, child, index):
-#            constraint, lookup_type, annotation, value = child
-#            lookup_type, value = lookup.convert_lookup(value, annotation)
-#            constraint.field = query.get_meta().get_field(lookup.index_name)
-#            constraint.col = constraint.field.column
-#            child = constraint, lookup_type, annotation, value
-#            filters.children[index] = child
+        BaseResolver._convert_filter(self, lookup, query, filters, child, index)

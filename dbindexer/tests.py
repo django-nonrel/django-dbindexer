@@ -52,7 +52,7 @@ class TestIndexed(TestCase):
             #print a.idxf_name_l_regex_2
             #print a.idxf_name_l_regex_3
 
-#    def test_joins(self):
+    def test_joins(self):
 #        self.assertEqual(3, len(Indexed.objects.all().filter(
 #            foreignkey__fk__name_fi2__iexact='juuBi')))
 #        self.assertEqual(3, len(Indexed.objects.all().filter(
@@ -60,8 +60,8 @@ class TestIndexed(TestCase):
 #            foreignkey__title__iexact='biJuu')))
 #        self.assertEqual(3, len(Indexed.objects.all().filter(
 #            foreignkey__name_fi__iexact='kyuuBi', foreignkey__title__iexact='biJuu')))
-#        self.assertEqual(3, len(Indexed.objects.all().filter(
-#            foreignkey__title__iexact='biJuu')))
+        self.assertEqual(3, len(Indexed.objects.all().filter(
+            foreignkey__title__iexact='biJuu')))
 #        self.assertEqual(1, len(Indexed.objects.all().filter(
 #            foreignkey__title__iexact='biJuu', name__iendswith='iMe')))
 
