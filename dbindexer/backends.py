@@ -1,4 +1,6 @@
 from django.db import models
+from django.db.models.sql.constants import LHS_ALIAS, LHS_JOIN_COL, TABLE_NAME, \
+    RHS_JOIN_COL
 from djangotoolbox.fields import ListField
 from copy import deepcopy
 
@@ -22,9 +24,12 @@ class BaseResolver(object):
         raise FieldDoesNotExist('Cannot find field in query.')
     
     def convert_filter(self, query, filters, child, index):
+        constraint, lookup_type, annotation, value = child
+        if not (constraint.field is not None and \
+                constraint.alias == query.table_map[query.model._meta.db_table][0]):
+            return
         for lookup in self.index_map.keys():
             if lookup.matches_filter(query, child, index):
-                constraint, lookup_type, annotation, value = child
                 lookup_type, value = lookup.convert_lookup(value, annotation)
                 constraint.field = query.get_meta().get_field(lookup.index_name)
                 constraint.col = constraint.field.column
@@ -65,7 +70,56 @@ class BaseResolver(object):
             value = self.get_value(lookup.model, lookup.field_name, query)
             value = lookup.convert_value(value)
             query.values[position] = (self.get_index(lookup), value)
+
+class PKNullFix(BaseResolver):
+    '''
+        Django doesn't generate correct code for ForeignKey__isnull.
+        It becomes a JOIN with pk__isnull which won't work on nonrel DBs,
+        so we rewrite the JOIN here.
+    '''
+    def convert_filter(self, query, filters, child, index):
+        constraint, lookup_type, annotation, value = child
+        if constraint.field is not None and lookup_type == 'isnull' and \
+                        isinstance(constraint.field, models.ForeignKey):
+            self.fix_fk_null_filter(query, constraint)
             
+    def unref_alias(self, query, alias):
+        table_name = query.alias_map[alias][TABLE_NAME]
+        query.alias_refcount[alias] -= 1
+        if query.alias_refcount[alias] < 1:
+            # Remove all information about the join
+            del query.alias_refcount[alias]
+            del query.join_map[query.rev_join_map[alias]]
+            del query.rev_join_map[alias]
+            del query.alias_map[alias]
+            query.table_map[table_name].remove(alias)
+            if len(query.table_map[table_name]) == 0:
+                del query.table_map[table_name]
+            query.used_aliases.discard(alias)
+            
+    def fix_fk_null_filter(self, query, constraint):
+        alias = constraint.alias
+        table_name = query.alias_map[alias][TABLE_NAME]
+        lhs_join_col = query.alias_map[alias][LHS_JOIN_COL]
+        rhs_join_col = query.alias_map[alias][RHS_JOIN_COL]
+        if table_name != constraint.field.rel.to._meta.db_table or \
+                rhs_join_col != constraint.field.rel.to._meta.pk.column or \
+                lhs_join_col != constraint.field.column:
+            return
+        next_alias = query.alias_map[alias][LHS_ALIAS]
+        if not next_alias:
+            return
+        self.unref_alias(query, alias)
+        alias = next_alias
+        constraint.col = constraint.field.column
+        constraint.alias = alias
+    
+    def create_index(self, lookup):
+        pass
+    
+    def convert_query(self, query):
+        pass
+
 # TODO: JOIN backend should be configurable per field i.e. in-memory or immutable
 class JOINResolver(BaseResolver):
     def get_field_to_index(self, model, field_name):

@@ -3,20 +3,6 @@ from djangotoolbox.fields import ListField
 from resolver import resolver
 from copy import deepcopy 
 
-''' Three layers:
-1. Adding fields
-    Instances of ExtraFieldLookup (or subclasses) do add extra fields to the
-    model if needed.
-    
-2. Saving to extra fields
-    Instances of ExtraFieldLookup do ask the resolver to get the value for (a) given
-    field name(s) so they can convert it to the desired value (lower() for iexact for example)
-    
-3. Transform queries
-    Instances of ExtraFieldLookup know how to transform a query so that a given query can be 
-    executed.
-'''
-
 import re
 regex = type(re.compile(''))
 

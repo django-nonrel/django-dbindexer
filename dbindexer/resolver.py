@@ -20,35 +20,17 @@ class Resolver(object):
 	        return cls()
 	    except AttributeError:
 	        raise ImproperlyConfigured('Module "%s" does not define a "%s" backend' % (module_name, attr_name))
-			
-	def get_value(self, model, field_name, query):
-		for backend in self.backends:
-			try:
-				return backend.get_value(model, field_name, query)
-			except:
-				continue
-		raise FieldDoesNotExist('Cannot find field %s for model %s in query.'
-                                % (field_name, model.__name__))
-	
+		
 	def convert_filter(self, query, filters, child, index):
 		for backend in self.backends:
-			try:
-				return backend.convert_filter(query, filters, child, index)
-			except:
-				continue
+			backend.convert_filter(query, filters, child, index)
 			
 	def create_index(self, lookup):
 		for backend in self.backends:
-			try:
-				return backend.create_index(lookup)
-			except:
-				continue
-	
+			backend.create_index(lookup)
+				
 	def convert_query(self, query):
 		for backend in self.backends:
-			try:
-				return backend.convert_query(query)
-			except:
-				continue
+			backend.convert_query(query)
 
 resolver = Resolver()

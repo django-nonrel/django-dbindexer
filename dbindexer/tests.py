@@ -64,9 +64,9 @@ class TestIndexed(TestCase):
 #        self.assertEqual(1, len(Indexed.objects.all().filter(
 #            foreignkey__title__iexact='biJuu', name__iendswith='iMe')))
 
-#    def test_fix_fk_isnull(self):
-#        self.assertEqual(0, len(Indexed.objects.filter(foreignkey=None)))
-#        self.assertEqual(3, len(Indexed.objects.exclude(foreignkey=None)))
+    def test_fix_fk_isnull(self):
+        self.assertEqual(0, len(Indexed.objects.filter(foreignkey=None)))
+        self.assertEqual(3, len(Indexed.objects.exclude(foreignkey=None)))
 
     def test_iexact(self):
         self.assertEqual(1, len(Indexed.objects.filter(name__iexact='itaChi')))
