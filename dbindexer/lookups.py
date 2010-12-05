@@ -32,13 +32,10 @@ class ExtraFieldLookup(object):
         self.model = model
         self.field_name = field_name
         self.lookup_def = lookup_def
-        self.column_name = None
-        if model and field_name:
-            self.column_name = model._meta.get_field(self.field_name).column
             
     @property
     def index_name(self):
-        return 'idxf_%s_l_%s' % (self.column_name, self.lookup_types[0])
+        return 'idxf_%s_l_%s' % (self.field_name, self.lookup_types[0])
     
     def convert_lookup(self, value, annotation):
         return 'exact', value
@@ -46,10 +43,9 @@ class ExtraFieldLookup(object):
     def convert_value(self, value):
         return value
         
-    def matches_filter(self, query, child, index):
-        constraint, lookup_type, annotation, value = child
-        return self.model == query.model and lookup_type in self.lookup_types \
-            and constraint.field.column == self.column_name
+    def matches_filter(self, model, field_name, lookup_type, value):
+        return self.model == model and lookup_type in self.lookup_types \
+            and field_name == self.field_name
     
     @classmethod
     def matches_lookup_def(cls, lookup_def):
@@ -177,7 +173,7 @@ class RegexLookup(ExtraFieldLookup):
     @property
     def index_name(self):
         # TODO: use different naming
-        return 'idxf_%s_l_%s' % (self.column_name, self.lookup_def.pattern)
+        return 'idxf_%s_l_%s' % (self.field_name, self.lookup_def.pattern)
 
     def is_icase(self):
         return self.lookup_def.flags & re.I
@@ -190,12 +186,10 @@ class RegexLookup(ExtraFieldLookup):
             return True
         return False
         
-    def matches_filter(self, query, child, index):
-        constraint, lookup_type, annotation, value = child
-        return self.model == query.model and lookup_type == \
+    def matches_filter(self, model, field_name, lookup_type, value):
+        return self.model == model and lookup_type == \
                 '%sregex' % ('i' if self.is_icase() else '') and \
-                value == self.lookup_def.pattern and \
-                constraint.field.column == self.column_name
+                value == self.lookup_def.pattern and field_name == self.field_name
     
     @classmethod
     def matches_lookup_def(cls, lookup_def):

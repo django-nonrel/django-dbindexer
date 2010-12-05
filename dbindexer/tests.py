@@ -35,6 +35,7 @@ register_index(Indexed, {
              'icontains', re.compile('^i+', re.I), re.compile('^I+'),
              re.compile('^i\d*i$', re.I)),
     'published': ('month', 'day', 'year', 'week_day'),
+    'foreignkey__title': 'iexact',
 })
 
 class TestIndexed(TestCase):
