@@ -1,6 +1,6 @@
 from django.db import models
-from django.db.models.sql.constants import LHS_ALIAS, LHS_JOIN_COL, TABLE_NAME, \
-    RHS_JOIN_COL
+from django.db.models.sql.constants import JOIN_TYPE, LHS_ALIAS, LHS_JOIN_COL, \
+    TABLE_NAME, RHS_JOIN_COL
 from djangotoolbox.fields import ListField
 from copy import deepcopy
 
@@ -30,11 +30,15 @@ class BaseResolver(object):
             return
         for lookup in self.index_map.keys():
             if lookup.matches_filter(query, child, index):
-                lookup_type, value = lookup.convert_lookup(value, annotation)
-                constraint.field = query.get_meta().get_field(lookup.index_name)
-                constraint.col = constraint.field.column
-                child = (constraint, lookup_type, annotation, value)
-                filters.children[index] = child
+                self._convert_filter(lookup, query, filters, child, index)
+                
+    def _convert_filter(self, lookup, query, filters, child, index):
+        constraint, lookup_type, annotation, value = child
+        lookup_type, value = lookup.convert_lookup(value, annotation)
+        constraint.field = query.get_meta().get_field(lookup.index_name)
+        constraint.col = constraint.field.column
+        child = constraint, lookup_type, annotation, value
+        filters.children[index] = child
     
     def create_index(self, lookup):
         field_to_index = self.get_field_to_index(lookup.model, lookup.field_name)
@@ -71,6 +75,20 @@ class BaseResolver(object):
             value = lookup.convert_value(value)
             query.values[position] = (self.get_index(lookup), value)
 
+def unref_alias(query, alias):
+        table_name = query.alias_map[alias][TABLE_NAME]
+        query.alias_refcount[alias] -= 1
+        if query.alias_refcount[alias] < 1:
+            # Remove all information about the join
+            del query.alias_refcount[alias]
+            del query.join_map[query.rev_join_map[alias]]
+            del query.rev_join_map[alias]
+            del query.alias_map[alias]
+            query.table_map[table_name].remove(alias)
+            if len(query.table_map[table_name]) == 0:
+                del query.table_map[table_name]
+            query.used_aliases.discard(alias)
+
 class PKNullFix(BaseResolver):
     '''
         Django doesn't generate correct code for ForeignKey__isnull.
@@ -84,18 +102,7 @@ class PKNullFix(BaseResolver):
             self.fix_fk_null_filter(query, constraint)
             
     def unref_alias(self, query, alias):
-        table_name = query.alias_map[alias][TABLE_NAME]
-        query.alias_refcount[alias] -= 1
-        if query.alias_refcount[alias] < 1:
-            # Remove all information about the join
-            del query.alias_refcount[alias]
-            del query.join_map[query.rev_join_map[alias]]
-            del query.rev_join_map[alias]
-            del query.alias_map[alias]
-            query.table_map[table_name].remove(alias)
-            if len(query.table_map[table_name]) == 0:
-                del query.table_map[table_name]
-            query.used_aliases.discard(alias)
+        unref_alias(query, alias)
             
     def fix_fk_null_filter(self, query, constraint):
         alias = constraint.alias
@@ -153,3 +160,59 @@ class JOINResolver(BaseResolver):
         for value in fields[1:-1]:
             foreignkey = getattr(foreignkey, value)
         return getattr(foreignkey, fields[-1])
+    
+    def convert_filter(self, query, filters, child, index):
+        constraint, lookup_type, annotation, value = child
+        if constraint.field is None:
+            return
+        
+        for lookup in self.index_map.keys():
+            if '__' in lookup.field_name:
+                column_index = self.get_column_index(query, constraint)
+                self.resolve_join(lookup, query, filters, index, column_index)
+    
+    def unref_alias(self, query, alias):
+        unref_alias(query, alias)
+    
+    def get_column_index(self, query, constraint):
+        if constraint.field:
+            column_chain = constraint.field.column
+            alias = constraint.alias
+            while alias:
+                join = query.alias_map[alias]
+                if join[JOIN_TYPE] == 'INNER JOIN':
+                    column_chain += '__' + join[LHS_JOIN_COL]
+                    alias = query.alias_map[alias][LHS_ALIAS]
+                else:
+                    alias = None
+        return '__'.join(reversed(column_chain.split('__')))
+
+    def resolve_join(self, lookup, query, filters, index, column_index):
+        constraint, lookup_type, annotation, value = child
+        if not constraint.field:
+            return
+
+        alias = constraint.alias
+        while True:
+            next_alias = query.alias_map[alias][LHS_ALIAS]
+            if not next_alias:
+                break
+            self.unref_alias(query, alias)
+            alias = next_alias
+        
+        index_name = get_index_name(column_index, lookup_type)
+        lookup_type, value = LOOKUP_TYPE_CONVERSION[lookup_type](value,
+            annotation)
+        constraint.alias = alias
+        constraint.field = self.query.get_meta().get_field(index_name)
+        constraint.col = constraint.field.column
+        child = (constraint, lookup_type, annotation, value)
+        filters.children[index] = child
+    
+#        def _convert_filter(self, lookup, query, filters, child, index):
+#            constraint, lookup_type, annotation, value = child
+#            lookup_type, value = lookup.convert_lookup(value, annotation)
+#            constraint.field = query.get_meta().get_field(lookup.index_name)
+#            constraint.col = constraint.field.column
+#            child = constraint, lookup_type, annotation, value
+#            filters.children[index] = child

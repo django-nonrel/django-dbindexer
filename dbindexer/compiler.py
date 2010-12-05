@@ -177,8 +177,6 @@ class BaseCompiler(object):
                 continue
 
             constraint, lookup_type, annotation, value = child
-            #if constraint.field is not None and constraint.alias \
-             #       == self.query.table_map[model._meta.db_table][0]:
             resolver.convert_filter(self.query, filters, child, index)
 
 class SQLCompiler(BaseCompiler):
