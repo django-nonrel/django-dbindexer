@@ -165,7 +165,7 @@ class JOINResolver(BaseResolver):
         
         if field_name is None:
             return
-        print self.index_map, column_index, field_name
+
         for lookup in self.index_map.keys():
             if lookup.matches_filter(query.model, field_name, lookup_type,
                                      value):

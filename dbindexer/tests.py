@@ -18,24 +18,16 @@ class Indexed(models.Model):
     foreignkey = models.ForeignKey(ForeignIndexed, null=True)
     foreignkey2 = models.ForeignKey(ForeignIndexed2, related_name='idx_set', null=True)
 
-#register_index(Indexed, {
-#    'name': ('iexact', 'endswith', 'istartswith', 'iendswith', 'contains',
-#        'icontains', re.compile('^i+', re.I), re.compile('^I+'),
-#        re.compile('^i\d*i$', re.I)),
-#    'published': ('month', 'day', 'week_day'),
-#    'foreignkey': 'iexact',
-#    'foreignkey__title': 'iexact',
-#    'foreignkey__fk__name_fi2': 'iexact',
-#    'foreignkey__name_fi': 'iexact',
-#    'foreignkey2__name_fi2': '$default'
-#})
-
 register_index(Indexed, {
     'name': ('iexact', 'endswith', 'istartswith', 'iendswith', 'contains',
              'icontains', re.compile('^i+', re.I), re.compile('^I+'),
              re.compile('^i\d*i$', re.I)),
     'published': ('month', 'day', 'year', 'week_day'),
+#    'foreignkey': 'iexact',
     'foreignkey__title': 'iexact',
+    'foreignkey__name_fi': 'iexact',
+    'foreignkey__fk__name_fi2': 'iexact',
+#    'foreignkey2__name_fi2': '$default'
 })
 
 class TestIndexed(TestCase):
@@ -47,23 +39,19 @@ class TestIndexed(TestCase):
         Indexed(name='ItAchi', foreignkey=kyuubi, foreignkey2=juubi).save()
         Indexed(name='YondAimE', foreignkey=kyuubi, foreignkey2=juubi).save()
         Indexed(name='I1038593i', foreignkey=kyuubi, foreignkey2=juubi).save()
-#        for a in Indexed.objects.all():
-#            print a.idxf_name_l_regex_1
-            #print a.idxf_name_l_regex_2
-            #print a.idxf_name_l_regex_3
 
     def test_joins(self):
-#        self.assertEqual(3, len(Indexed.objects.all().filter(
-#            foreignkey__fk__name_fi2__iexact='juuBi')))
-#        self.assertEqual(3, len(Indexed.objects.all().filter(
-#            foreignkey__fk__name_fi2__iexact='juuBi',
-#            foreignkey__title__iexact='biJuu')))
-#        self.assertEqual(3, len(Indexed.objects.all().filter(
-#            foreignkey__name_fi__iexact='kyuuBi', foreignkey__title__iexact='biJuu')))
+        self.assertEqual(3, len(Indexed.objects.all().filter(
+            foreignkey__fk__name_fi2__iexact='juuBi',
+            foreignkey__title__iexact='biJuu')))
+        self.assertEqual(3, len(Indexed.objects.all().filter(
+            foreignkey__name_fi__iexact='kyuuBi', foreignkey__title__iexact='biJuu')))
         self.assertEqual(3, len(Indexed.objects.all().filter(
             foreignkey__title__iexact='biJuu')))
-#        self.assertEqual(1, len(Indexed.objects.all().filter(
-#            foreignkey__title__iexact='biJuu', name__iendswith='iMe')))
+        self.assertEqual(1, len(Indexed.objects.all().filter(
+            foreignkey__title__iexact='biJuu', name__iendswith='iMe')))
+        self.assertEqual(3, len(Indexed.objects.all().filter(
+            foreignkey__fk__name_fi2__iexact='juuBi')))
 
     def test_fix_fk_isnull(self):
         self.assertEqual(0, len(Indexed.objects.filter(foreignkey=None)))
