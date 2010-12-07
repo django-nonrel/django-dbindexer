@@ -39,7 +39,12 @@ class ExtraFieldLookup(object):
         return 'idxf_%s_l_%s' % (self.field_name, self.lookup_types[0])
     
     def convert_lookup(self, value, lookup_type):
-        return 'exact', value
+        if isinstance(value, (tuple, list)):
+            value = (self.convert_value(val, lookup_type)[1] for val in value)
+        return self.convert_value(val, lookup_type)[0], value
+    
+    def convert_value(self, value):
+        return value
         
     def matches_filter(self, model, field_name, lookup_type, value):
         return self.model == model and lookup_type in self.lookup_types \
@@ -52,8 +57,10 @@ class ExtraFieldLookup(object):
         return False
     
     def get_field_to_add(self, field_to_index):
-        # return a deepcopy!
-        return deepcopy(self.field_to_add)
+        field_to_add = deepcopy(self.field_to_add)
+        if isinstance(field_to_index, ListField):
+            field_to_add = ListField(field_to_add, editable=False, null=True)
+        return field_to_add
 
 class DateLookup(ExtraFieldLookup):
     def __init__(self, *args, **kwargs):

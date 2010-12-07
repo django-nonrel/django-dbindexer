@@ -2,6 +2,7 @@ from django.db import models, DatabaseError
 from django.test import TestCase
 from dbindexer.api import register_index
 from dbindexer.lookups import StandardLookup
+from djangotoolbox.fields import ListField
 from datetime import datetime
 import re
 
@@ -19,6 +20,7 @@ class Indexed(models.Model):
     published = models.DateTimeField(auto_now_add=True)
     foreignkey = models.ForeignKey(ForeignIndexed, null=True)
     foreignkey2 = models.ForeignKey(ForeignIndexed2, related_name='idx_set', null=True)
+    tags = ListField(models.CharField(max_length=500, null=True))
 
 register_index(Indexed, {
     'name': ('iexact', 'endswith', 'istartswith', 'iendswith', 'contains',
