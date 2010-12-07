@@ -16,6 +16,8 @@ class LookupBase(type):
             new_cls.lookup_types = (new_cls.lookup_types, )
         return new_cls 
 
+#TODO: Handle iexact, ... on more than CharField (ListField for example).
+# In order to do so extend get_field_to_add()
 class ExtraFieldLookup(object):
     '''Default is to behave like an exact filter on an ExtraField.'''
     __metaclass__ = LookupBase

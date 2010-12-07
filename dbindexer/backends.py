@@ -144,6 +144,7 @@ class PKNullFix(BaseResolver):
         pass
 
 # TODO: JOIN backend should be configurable per field i.e. in-memory or immutable
+# or should it be done via another backend?
 class JOINResolver(BaseResolver):
     def create_index(self, lookup):
         if '__' in lookup.field_name:
