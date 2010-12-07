@@ -1,11 +1,13 @@
-from dbindexer.api import register_index
 from django.db import models, DatabaseError
 from django.test import TestCase
+from dbindexer.api import register_index
+from dbindexer.lookups import StandardLookup
 from datetime import datetime
 import re
 
 class ForeignIndexed2(models.Model):
     name_fi2 = models.CharField(max_length=500)
+    age = models.IntegerField()
     
 class ForeignIndexed(models.Model):
     title = models.CharField(max_length=500)
@@ -27,12 +29,13 @@ register_index(Indexed, {
     'foreignkey__title': 'iexact',
     'foreignkey__name_fi': 'iexact',
     'foreignkey__fk__name_fi2': 'iexact',
-#    'foreignkey2__name_fi2': '$default'
+    'foreignkey2__name_fi2': (StandardLookup(), ),
+    'foreignkey2__age': (StandardLookup(), )
 })
 
 class TestIndexed(TestCase):
     def setUp(self):
-        juubi = ForeignIndexed2(name_fi2='Juubi')
+        juubi = ForeignIndexed2(name_fi2='Juubi', age=2)
         juubi.save()
         kyuubi = ForeignIndexed(name_fi='Kyuubi', title='Bijuu', fk=juubi)
         kyuubi.save()
@@ -52,6 +55,14 @@ class TestIndexed(TestCase):
             foreignkey__title__iexact='biJuu', name__iendswith='iMe')))
         self.assertEqual(3, len(Indexed.objects.all().filter(
             foreignkey__fk__name_fi2__iexact='juuBi')))
+        self.assertEqual(3, len(Indexed.objects.all().filter(
+            foreignkey2__name_fi2='Juubi')))
+        
+        # test multiple standard lookups
+        self.assertEqual(3, len(Indexed.objects.all().filter(
+            foreignkey2__age=2)))
+        self.assertEqual(3, len(Indexed.objects.all().filter(
+            foreignkey2__age__lt=3)))
 
     def test_fix_fk_isnull(self):
         self.assertEqual(0, len(Indexed.objects.filter(foreignkey=None)))

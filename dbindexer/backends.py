@@ -3,7 +3,6 @@ from django.db.models.fields import FieldDoesNotExist
 from django.db.models.sql.constants import JOIN_TYPE, LHS_ALIAS, LHS_JOIN_COL, \
     TABLE_NAME, RHS_JOIN_COL
 from djangotoolbox.fields import ListField
-from copy import deepcopy
 
 class BaseResolver(object):
     def __init__(self):
@@ -20,7 +19,7 @@ class BaseResolver(object):
         if not field_to_index:
             return 
         
-        index_field = deepcopy(lookup.field_to_add)        
+        index_field = lookup.get_field_to_add(field_to_index)        
         config_field = index_field.item_field if \
             isinstance(index_field, ListField) else index_field  
         if hasattr(field_to_index, 'max_length') and \
@@ -60,7 +59,7 @@ class BaseResolver(object):
     
     def _convert_filter(self, lookup, query, filters, child, index):
         constraint, lookup_type, annotation, value = child
-        lookup_type, value = lookup.convert_lookup(value, annotation)
+        lookup_type, value = lookup.convert_lookup(value, lookup_type)
         constraint.field = query.get_meta().get_field(lookup.index_name)
         constraint.col = constraint.field.column
         child = constraint, lookup_type, annotation, value
@@ -162,7 +161,7 @@ class JOINResolver(BaseResolver):
         
         column_index = self.get_column_index(query, constraint)
         field_name = self.column_to_name.get(column_index)
-        
+
         if field_name is None:
             return
 

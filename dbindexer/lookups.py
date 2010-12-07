@@ -16,7 +16,6 @@ class LookupBase(type):
             new_cls.lookup_types = (new_cls.lookup_types, )
         return new_cls 
 
-
 class ExtraFieldLookup(object):
     '''Default is to behave like an exact filter on an ExtraField.'''
     __metaclass__ = LookupBase
@@ -37,11 +36,8 @@ class ExtraFieldLookup(object):
     def index_name(self):
         return 'idxf_%s_l_%s' % (self.field_name, self.lookup_types[0])
     
-    def convert_lookup(self, value, annotation):
+    def convert_lookup(self, value, lookup_type):
         return 'exact', value
-    
-    def convert_value(self, value):
-        return value
         
     def matches_filter(self, model, field_name, lookup_type, value):
         return self.model == model and lookup_type in self.lookup_types \
@@ -52,6 +48,10 @@ class ExtraFieldLookup(object):
         if lookup_def in cls.lookup_types:
             return True
         return False
+    
+    def get_field_to_add(self, field_to_index):
+        # return a deepcopy!
+        return deepcopy(self.field_to_add)
 
 class DateLookup(ExtraFieldLookup):
     def __init__(self, *args, **kwargs):
@@ -59,7 +59,7 @@ class DateLookup(ExtraFieldLookup):
         defaults.update(kwargs)
         ExtraFieldLookup.__init__(self, *args, **defaults)
     
-    def convert_lookup(self, value, annotation):
+    def convert_lookup(self, value, lookup_type):
         return 'exact', value
 
 class Day(DateLookup):
@@ -96,7 +96,7 @@ class Contains(ExtraFieldLookup):
         defaults.update(kwargs)
         ExtraFieldLookup.__init__(self, *args, **defaults)
     
-    def convert_lookup(self, value, annotation):
+    def convert_lookup(self, value, lookup_type):
         return 'startswith', value
 
     def convert_value(self, value):
@@ -112,7 +112,7 @@ class Contains(ExtraFieldLookup):
 class Icontains(Contains):
     lookup_types = 'icontains'
     
-    def convert_lookup(self, value, annotation):
+    def convert_lookup(self, value, lookup_type):
         return 'startswith', value.lower()
 
     def convert_value(self, value):
@@ -121,7 +121,7 @@ class Icontains(Contains):
 class Iexact(ExtraFieldLookup):
     lookup_types = 'iexact'
     
-    def convert_lookup(self, value, annotation):
+    def convert_lookup(self, value, lookup_type):
         return 'exact', value.lower()
     
     def convert_value(self, value):
@@ -130,7 +130,7 @@ class Iexact(ExtraFieldLookup):
 class Istartswith(ExtraFieldLookup):
     lookup_types = 'istartswith'
     
-    def convert_lookup(self, value, annotation):
+    def convert_lookup(self, value, lookup_type):
         return 'startswith', value.lower()
 
     def convert_value(self, value):
@@ -139,7 +139,7 @@ class Istartswith(ExtraFieldLookup):
 class Endswith(ExtraFieldLookup):
     lookup_types = 'endswith'
     
-    def convert_lookup(self, value, annotation):
+    def convert_lookup(self, value, lookup_type):
         return 'startswith', value[::-1]
 
     def convert_value(self, value):
@@ -148,7 +148,7 @@ class Endswith(ExtraFieldLookup):
 class Iendswith(ExtraFieldLookup):
     lookup_types = 'iendswith'
     
-    def convert_lookup(self, value, annotation):
+    def convert_lookup(self, value, lookup_type):
         return 'startswith', value[::-1].lower()
 
     def convert_value(self, value):
@@ -177,7 +177,7 @@ class RegexLookup(ExtraFieldLookup):
     def is_icase(self):
         return self.lookup_def.flags & re.I
     
-    def convert_lookup(self, value, annotation):
+    def convert_lookup(self, value, lookup_type):
         return 'exact', True
 
     def convert_value(self, value):
@@ -196,8 +196,23 @@ class RegexLookup(ExtraFieldLookup):
             return True
         return False 
 
-# used for JOINs
-#class StandardLookup(ExtraFieldLookup):
-#    def __init__(self):
-#        # to get the field type for a JOIN definition
-#        self.join_resolver = JOINResolver
+class StandardLookup(ExtraFieldLookup):
+    ''' Creates a copy of the field_to_index in order to allow querying for 
+        standard lookup_types on a JOINed property. '''
+    # TODO: database backend can specify standardLookups
+    lookup_types = ('exact', 'gt', 'gte', 'lt', 'lte', 'in', 'range', 'isnull')
+    
+    @property
+    def index_name(self):
+        return 'idxf_%s_l_%s' % (self.field_name, 'standard')
+    
+    def convert_lookup(self, value, lookup_type):
+        # don't change the lookup_type
+        return lookup_type, value
+    
+    def get_field_to_add(self, field_to_index):
+        field_to_add = deepcopy(field_to_index)
+        if isinstance(field_to_add, (models.DateTimeField,
+                                    models.DateField, models.TimeField)):
+            field_to_add.auto_now_add = field_to_add.auto_now = False
+        return field_to_add
