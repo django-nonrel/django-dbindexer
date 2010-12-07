@@ -16,17 +16,16 @@ class LookupBase(type):
             new_cls.lookup_types = (new_cls.lookup_types, )
         return new_cls 
 
-#TODO: Handle iexact, ... on more than CharField (ListField for example).
-# In order to do so extend get_field_to_add()
 class ExtraFieldLookup(object):
     '''Default is to behave like an exact filter on an ExtraField.'''
     __metaclass__ = LookupBase
     lookup_types = 'exact'
     
     def __init__(self, model=None, field_name=None, lookup_def=None,
-            field_to_add=models.CharField(max_length=500, editable=False,
-                                          null=True)):
+                 new_lookup='exact', field_to_add=models.CharField(
+                 max_length=500, editable=False, null=True)):
         self.field_to_add = field_to_add
+        self.new_lookup = new_lookup
         self.contribute(model, field_name, lookup_def)
         
     def contribute(self, model, field_name, lookup_def):
@@ -39,11 +38,24 @@ class ExtraFieldLookup(object):
         return 'idxf_%s_l_%s' % (self.field_name, self.lookup_types[0])
     
     def convert_lookup(self, value, lookup_type):
+        # TODO: can value be a list or tuple? (in case of in yes)
         if isinstance(value, (tuple, list)):
-            value = (self.convert_value(val, lookup_type)[1] for val in value)
-        return self.convert_value(val, lookup_type)[0], value
+            value = [self._convert_lookup(val, lookup_type)[1] for val in value]
+        else:
+            _, value = self._convert_lookup(value, lookup_type)
+        return self.new_lookup, value
+    
+    def _convert_lookup(self, value, lookup_type):
+        return lookup_type, value
     
     def convert_value(self, value):
+        if isinstance(value, (tuple, list)):
+            value = [self._convert_value(val) for val in value]
+        else:
+            value = self._convert_value(value)
+        return value
+    
+    def _convert_value(self, value):
         return value
         
     def matches_filter(self, model, field_name, lookup_type, value):
@@ -64,52 +76,65 @@ class ExtraFieldLookup(object):
 
 class DateLookup(ExtraFieldLookup):
     def __init__(self, *args, **kwargs):
-        defaults = {'field_to_add': models.IntegerField(editable=False, null=True)}
+        defaults = {'new_lookup': 'exact',
+                    'field_to_add': models.IntegerField(editable=False, null=True)}
         defaults.update(kwargs)
         ExtraFieldLookup.__init__(self, *args, **defaults)
     
-    def convert_lookup(self, value, lookup_type):
-        return 'exact', value
+    def _convert_lookup(self, value, lookup_type):
+        return self.new_lookup, value
 
 class Day(DateLookup):
     lookup_types = 'day'
     
-    def convert_value(self, value):
+    def _convert_value(self, value):
         return value.day
 
 class Month(DateLookup):
     lookup_types = 'month'
     
-    def convert_value(self, value):
+    def _convert_value(self, value):
         return value.month
 
 class Year(DateLookup):
     lookup_types = 'year'
 
-    def convert_value(self, value):
+    def _convert_value(self, value):
         return value.year
 
 class Weekday(DateLookup):
     lookup_types = 'week_day'
     
-    def convert_value(self, value):
+    def _convert_value(self, value):
         return value.isoweekday()
 
 class Contains(ExtraFieldLookup):
     lookup_types = 'contains'
 
     def __init__(self, *args, **kwargs):
-        defaults = {'field_to_add': ListField(models.CharField(500),
+        defaults = {'new_lookup': 'startswith',
+                    'field_to_add': ListField(models.CharField(500),
                                               editable=False, null=True)
         }
         defaults.update(kwargs)
         ExtraFieldLookup.__init__(self, *args, **defaults)
     
-    def convert_lookup(self, value, lookup_type):
-        return 'startswith', value
-
+    def get_field_to_add(self, field_to_index):
+        # always return a ListField of CharFields even in the case of
+        # field_to_index being a ListField itself!
+        return deepcopy(self.field_to_add)
+    
     def convert_value(self, value):
-        return self.contains_indexer(value)
+        new_value = []
+        if isinstance(value, (tuple, list)):
+            for val in value:
+                new_value.extend(self.contains_indexer(val))
+        else:
+            new_value = self.contains_indexer(value)
+        return new_value
+     
+    def _convert_lookup(self, value, lookup_type):
+        return self.new_lookup, value
 
     def contains_indexer(self, value):
         # In indexing mode we add all postfixes ('o', 'lo', ..., 'hello')
@@ -121,46 +146,56 @@ class Contains(ExtraFieldLookup):
 class Icontains(Contains):
     lookup_types = 'icontains'
     
-    def convert_lookup(self, value, lookup_type):
-        return 'startswith', value.lower()
-
     def convert_value(self, value):
         return [val.lower() for val in Contains.convert_value(self, value)]
+    
+    def _convert_lookup(self, value, lookup_type):
+        return self.new_lookup, value.lower()
 
 class Iexact(ExtraFieldLookup):
     lookup_types = 'iexact'
+        
+    def _convert_lookup(self, value, lookup_type):
+        return self.new_lookup, value.lower()
     
-    def convert_lookup(self, value, lookup_type):
-        return 'exact', value.lower()
-    
-    def convert_value(self, value):
+    def _convert_value(self, value):
         return value.lower()
 
 class Istartswith(ExtraFieldLookup):
     lookup_types = 'istartswith'
     
-    def convert_lookup(self, value, lookup_type):
-        return 'startswith', value.lower()
+    def __init__(self, *args, **kwargs):
+        defaults = {'new_lookup': 'startswith'}
+        defaults.update(kwargs)
+        ExtraFieldLookup.__init__(self, *args, **defaults)
+    
+    def _convert_lookup(self, value, lookup_type):
+        return self.new_lookup, value.lower()
 
-    def convert_value(self, value):
+    def _convert_value(self, value):
         return value.lower()
 
 class Endswith(ExtraFieldLookup):
     lookup_types = 'endswith'
     
-    def convert_lookup(self, value, lookup_type):
-        return 'startswith', value[::-1]
+    def __init__(self, *args, **kwargs):
+        defaults = {'new_lookup': 'startswith'}
+        defaults.update(kwargs)
+        ExtraFieldLookup.__init__(self, *args, **defaults)
+    
+    def _convert_lookup(self, value, lookup_type):
+        return self.new_lookup, value[::-1]
 
-    def convert_value(self, value):
+    def _convert_value(self, value):
         return value[::-1]
 
-class Iendswith(ExtraFieldLookup):
+class Iendswith(Endswith):
     lookup_types = 'iendswith'
     
-    def convert_lookup(self, value, lookup_type):
-        return 'startswith', value[::-1].lower()
+    def _convert_lookup(self, value, lookup_type):
+        return self.new_lookup, value[::-1].lower()
 
-    def convert_value(self, value):
+    def _convert_value(self, value):
         return value[::-1].lower()
 
 class RegexLookup(ExtraFieldLookup):
@@ -186,10 +221,10 @@ class RegexLookup(ExtraFieldLookup):
     def is_icase(self):
         return self.lookup_def.flags & re.I
     
-    def convert_lookup(self, value, lookup_type):
-        return 'exact', True
+    def _convert_lookup(self, value, lookup_type):
+        return self.new_lookup, True
 
-    def convert_value(self, value):
+    def _convert_value(self, value):
         if self.lookup_def.match(value):
             return True
         return False
@@ -216,7 +251,6 @@ class StandardLookup(ExtraFieldLookup):
         return 'idxf_%s_l_%s' % (self.field_name, 'standard')
     
     def convert_lookup(self, value, lookup_type):
-        # don't change the lookup_type
         return lookup_type, value
     
     def get_field_to_add(self, field_to_index):

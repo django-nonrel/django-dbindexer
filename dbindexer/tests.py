@@ -27,6 +27,7 @@ register_index(Indexed, {
              'icontains', re.compile('^i+', re.I), re.compile('^I+'),
              re.compile('^i\d*i$', re.I)),
     'published': ('month', 'day', 'year', 'week_day'),
+    'tags': ('iexact', 'icontains', StandardLookup(), ),
 #    'foreignkey': 'iexact',
     'foreignkey__title': 'iexact',
     'foreignkey__name_fi': 'iexact',
@@ -41,16 +42,20 @@ class TestIndexed(TestCase):
         juubi.save()
         kyuubi = ForeignIndexed(name_fi='Kyuubi', title='Bijuu', fk=juubi)
         kyuubi.save()
-        Indexed(name='ItAchi', foreignkey=kyuubi, foreignkey2=juubi).save()
-        Indexed(name='YondAimE', foreignkey=kyuubi, foreignkey2=juubi).save()
-        Indexed(name='I1038593i', foreignkey=kyuubi, foreignkey2=juubi).save()
+        Indexed(name='ItAchi', tags=('Sasuke', 'Madara'), foreignkey=kyuubi,
+                foreignkey2=juubi).save()
+        Indexed(name='YondAimE', tags=('Naruto', 'Jiraya'), foreignkey=kyuubi,
+                foreignkey2=juubi).save()
+        Indexed(name='I1038593i', tags=('Sharingan'), foreignkey=kyuubi,
+                foreignkey2=juubi).save()
 
     def test_joins(self):
         self.assertEqual(3, len(Indexed.objects.all().filter(
             foreignkey__fk__name_fi2__iexact='juuBi',
             foreignkey__title__iexact='biJuu')))
         self.assertEqual(3, len(Indexed.objects.all().filter(
-            foreignkey__name_fi__iexact='kyuuBi', foreignkey__title__iexact='biJuu')))
+            foreignkey__name_fi__iexact='kyuuBi',
+            foreignkey__title__iexact='biJuu')))
         self.assertEqual(3, len(Indexed.objects.all().filter(
             foreignkey__title__iexact='biJuu')))
         self.assertEqual(1, len(Indexed.objects.all().filter(
@@ -73,7 +78,13 @@ class TestIndexed(TestCase):
     def test_iexact(self):
         self.assertEqual(1, len(Indexed.objects.filter(name__iexact='itaChi')))
         self.assertEqual(1, Indexed.objects.filter(name__iexact='itaChi').count())
-
+        
+        # test on list field
+        self.assertEqual(1, Indexed.objects.filter(tags__iexact='SasuKE').count())
+    
+    def test_standard_lookups(self):
+        self.assertEqual(1, Indexed.objects.filter(tags__exact='Naruto').count())
+    
     def test_delete(self):
         Indexed.objects.get(name__iexact='itaChi').delete()
         self.assertEqual(0, Indexed.objects.all().filter(name__iexact='itaChi').count())
@@ -106,3 +117,6 @@ class TestIndexed(TestCase):
 #        # passes on production but not on gae-sdk (development)
 #        self.assertEqual(1, len(Indexed.objects.all().filter(name__contains='Aim')))
 #        self.assertEqual(1, len(Indexed.objects.all().filter(name__icontains='aim')))
+#
+#        # test icontains on a list
+#        self.assertEqual(2, len(Indexed.objects.all().filter(tags__icontains='RA')))
