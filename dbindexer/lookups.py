@@ -216,7 +216,8 @@ class RegexLookup(ExtraFieldLookup):
     
     @property
     def index_name(self):
-        return 'idxf_%s_l_%s' % (self.field_name, self.lookup_def.pattern.encode('hex'))
+        return 'idxf_%s_l_%s' % (self.field_name,
+                                 self.lookup_def.pattern.encode('hex'))
 
     def is_icase(self):
         return self.lookup_def.flags & re.I

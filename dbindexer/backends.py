@@ -26,7 +26,7 @@ class BaseResolver(object):
                 isinstance(config_field, models.CharField):
             config_field.max_length = field_to_index.max_length
             
-        lookup.model.add_to_class(lookup.index_name, index_field)
+        lookup.model.add_to_class(self.index_name(lookup), index_field)
         self.index_map[lookup] = index_field
         self.add_column_to_name(lookup.model, lookup.field_name)
 
@@ -53,14 +53,21 @@ class BaseResolver(object):
             for lookup in self.index_map.keys():
                 if lookup.matches_filter(query.model, field_name, lookup_type,
                                          value):
-                    self._convert_filter(lookup, query, filters, child, index)
+                    lookup_type, value = lookup.convert_lookup(value, lookup_type)
+                    index_name = self.index_name(lookup)
+                    self._convert_filter(query, filters, child, index,
+                                         lookup_type, value, index_name)
                 
     ''' helper methods '''
     
-    def _convert_filter(self, lookup, query, filters, child, index):
+    def index_name(self, lookup):
+        return lookup.index_name
+    
+    def _convert_filter(self, query, filters, child, index, new_lookup_type,
+                        new_value, index_name):
         constraint, lookup_type, annotation, value = child
-        lookup_type, value = lookup.convert_lookup(value, lookup_type)
-        constraint.field = query.get_meta().get_field(lookup.index_name)
+        lookup_type, value = new_lookup_type, new_value
+        constraint.field = query.get_meta().get_field(index_name)
         constraint.col = constraint.field.column
         child = constraint, lookup_type, annotation, value
         filters.children[index] = child
@@ -92,18 +99,18 @@ class BaseResolver(object):
         return None
 
 def unref_alias(query, alias):
-        table_name = query.alias_map[alias][TABLE_NAME]
-        query.alias_refcount[alias] -= 1
-        if query.alias_refcount[alias] < 1:
-            # Remove all information about the join
-            del query.alias_refcount[alias]
-            del query.join_map[query.rev_join_map[alias]]
-            del query.rev_join_map[alias]
-            del query.alias_map[alias]
-            query.table_map[table_name].remove(alias)
-            if len(query.table_map[table_name]) == 0:
-                del query.table_map[table_name]
-            query.used_aliases.discard(alias)
+    table_name = query.alias_map[alias][TABLE_NAME]
+    query.alias_refcount[alias] -= 1
+    if query.alias_refcount[alias] < 1:
+        # Remove all information about the join
+        del query.alias_refcount[alias]
+        del query.join_map[query.rev_join_map[alias]]
+        del query.rev_join_map[alias]
+        del query.alias_map[alias]
+        query.table_map[table_name].remove(alias)
+        if len(query.table_map[table_name]) == 0:
+            del query.table_map[table_name]
+        query.used_aliases.discard(alias)
 
 class PKNullFix(BaseResolver):
     '''
@@ -177,11 +184,10 @@ class JOINResolver(BaseResolver):
         return BaseResolver.get_field_to_index(self, model, field_name)
     
     def get_value(self, model, field_name, query):
-        pk = BaseResolver.get_value(self, model, field_name.split('__')[0],
+        value = BaseResolver.get_value(self, model, field_name.split('__')[0],
                                     query)
-        value = None
-        if pk is not None:
-            value = self.get_target_value(model, field_name, pk)
+        if value is not None:
+            value = self.get_target_value(model, field_name, value)
         return value        
     
     def get_model_chain(self, model, field_chain):
@@ -193,7 +199,13 @@ class JOINResolver(BaseResolver):
        
     def get_target_value(self, start_model, field_chain, pk):
         fields = field_chain.split('__')
-        target_model = start_model._meta.get_field(fields[0]).rel.to
+        foreign_key = start_model._meta.get_field(fields[0])
+        
+        if not foreign_key.rel:
+            # field isn't a related one, so return the value itself
+            return pk
+        
+        target_model = foreign_key.rel.to
         foreignkey = target_model.objects.all().get(pk=pk)
         for value in fields[1:-1]:
             foreignkey = getattr(foreignkey, value)
@@ -237,4 +249,79 @@ class JOINResolver(BaseResolver):
             alias = next_alias
         
         constraint.alias = alias
-        BaseResolver._convert_filter(self, lookup, query, filters, child, index)
+        lookup_type, value = lookup.convert_lookup(value, lookup_type)
+        index_name = self.index_name(lookup)
+        self._convert_filter(query, filters, child, index, lookup_type,
+                             value, index_name)
+
+# TODO: distinguish in memory joins from standard joins somehow
+class InMemoryJOINResolver(JOINResolver):
+    def create_index(self, lookup):
+        if '__' in lookup.field_name:
+            field_to_index = self.get_field_to_index(lookup.model, lookup.field_name)
+        
+            if not field_to_index:
+                return 
+            
+            # save old column_to_name so we can make in memory queries later on 
+            self.add_column_to_name(lookup.model, lookup.field_name)
+            # install lookup on target model
+            model = self.get_model_chain(lookup.model, lookup.field_name)[-1]
+            lookup.model = model
+            lookup.field_name = lookup.field_name.split('__')[-1]
+            # TODO: Standard lookups don't need to create an additional field, but
+            # it's just optimization, it should work now too
+            BaseResolver.create_index(self, lookup)
+    
+    def index_name(self, lookup):
+        # use another index_name to avoid conflicts with lookups defined on the
+        # target model
+        return lookup.index_name + '_in_memory_join'
+    
+    def convert_query(self, query):
+        BaseResolver.convert_query(self, query)
+    
+    def convert_filter(self, query, filters, child, index):
+        constraint, lookup_type, annotation, value = child
+        if constraint.field is None:
+            return
+        
+        column_index = self.get_column_index(query, constraint)
+        field_chain = self.column_to_name.get(column_index)
+
+        if field_chain is None:
+            return
+        
+        if '__' not in field_chain:
+            return BaseResolver.convert_filter(self, query, filters, child, index)
+        
+        pks = self.get_pks(query, field_chain, lookup_type, value)
+        self.resolve_join(query, filters, child, index)
+        self._convert_filter(query, filters, child, index, 'in',
+                             (pk for pk in pks), field_chain.split('__')[0])
+        
+    def get_pks(self, query, field_chain, lookup_type, value):
+        model_chain = self.get_model_chain(query.model, field_chain)
+        field_names = field_chain.split('__')
+        first_lookup = {'%s__%s' %(field_names[-1], lookup_type): value}
+        pks = model_chain[-1].objects.all().filter(**first_lookup).\
+            values_list('id', flat=True)
+        
+        for model, field_name in reversed(zip(model_chain[1:-1], field_chain[1:-1])):
+            pks = model.objects.all().filter(pk__in=pks)
+        return pks
+    
+    def resolve_join(self, query, filters, child, index):
+        constraint, lookup_type, annotation, value = child
+        if not constraint.field:
+            return
+        
+        alias = constraint.alias
+        while True:
+            next_alias = query.alias_map[alias][LHS_ALIAS]
+            if not next_alias:
+                break
+            self.unref_alias(query, alias)
+            alias = next_alias
+        
+        constraint.alias = alias
