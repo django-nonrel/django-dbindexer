@@ -3,6 +3,7 @@ from django.db.models.fields import FieldDoesNotExist
 from django.db.models.sql.constants import JOIN_TYPE, LHS_ALIAS, LHS_JOIN_COL, \
     TABLE_NAME, RHS_JOIN_COL
 from djangotoolbox.fields import ListField
+from dbindexer.lookups import StandardLookup
 
 class BaseResolver(object):
     def __init__(self):
@@ -44,6 +45,7 @@ class BaseResolver(object):
             value = self.get_value(lookup.model, lookup.field_name, query)
             value = lookup.convert_value(value)
             query.values[position] = (self.get_index(lookup), value)
+            
     
     def convert_filter(self, query, filters, child, index):
         constraint, lookup_type, annotation, value = child
@@ -176,7 +178,11 @@ class JOINResolver(BaseResolver):
         for lookup in self.index_map.keys():
             if lookup.matches_filter(query.model, field_name, lookup_type,
                                      value):
-                self.resolve_join(lookup, query, filters, child, index)
+                self.resolve_join(query, filters, child, index)
+                lookup_type, value = lookup.convert_lookup(value, lookup_type)
+                index_name = self.index_name(lookup)
+                self._convert_filter(query, filters, child, index, lookup_type,
+                             value, index_name)
     
     def get_field_to_index(self, model, field_name):
         model = self.get_model_chain(model, field_name)[-1]
@@ -235,7 +241,7 @@ class JOINResolver(BaseResolver):
                     alias = None
         return '__'.join(reversed(column_chain.split('__')))
 
-    def resolve_join(self, lookup, query, filters, child, index):
+    def resolve_join(self, query, filters, child, index):
         constraint, lookup_type, annotation, value = child
         if not constraint.field:
             return
@@ -249,10 +255,6 @@ class JOINResolver(BaseResolver):
             alias = next_alias
         
         constraint.alias = alias
-        lookup_type, value = lookup.convert_lookup(value, lookup_type)
-        index_name = self.index_name(lookup)
-        self._convert_filter(query, filters, child, index, lookup_type,
-                             value, index_name)
 
 # TODO: distinguish in memory joins from standard joins somehow
 class InMemoryJOINResolver(JOINResolver):
@@ -265,12 +267,15 @@ class InMemoryJOINResolver(JOINResolver):
             
             # save old column_to_name so we can make in memory queries later on 
             self.add_column_to_name(lookup.model, lookup.field_name)
+            
+            # don't add an extra field for standard lookups!
+            if isinstance(lookup, StandardLookup):
+                return 
+             
             # install lookup on target model
             model = self.get_model_chain(lookup.model, lookup.field_name)[-1]
             lookup.model = model
             lookup.field_name = lookup.field_name.split('__')[-1]
-            # TODO: Standard lookups don't need to create an additional field, but
-            # it's just optimization, it should work now too
             BaseResolver.create_index(self, lookup)
     
     def index_name(self, lookup):
@@ -304,24 +309,10 @@ class InMemoryJOINResolver(JOINResolver):
         model_chain = self.get_model_chain(query.model, field_chain)
         field_names = field_chain.split('__')
         first_lookup = {'%s__%s' %(field_names[-1], lookup_type): value}
-        pks = model_chain[-1].objects.all().filter(**first_lookup).\
-            values_list('id', flat=True)
+        pks = model_chain[-1].objects.all().filter(**first_lookup).values_list(
+            'id', flat=True)
         
-        for model, field_name in reversed(zip(model_chain[1:-1], field_chain[1:-1])):
-            pks = model.objects.all().filter(pk__in=pks)
+        for model, field_name in reversed(zip(model_chain[1:-1], field_names[1:-1])):
+            lookup = {'%s__%s' %(field_name, 'in'):(pk for pk in pks)}
+            pks = model.objects.all().filter(**lookup)
         return pks
-    
-    def resolve_join(self, query, filters, child, index):
-        constraint, lookup_type, annotation, value = child
-        if not constraint.field:
-            return
-        
-        alias = constraint.alias
-        while True:
-            next_alias = query.alias_map[alias][LHS_ALIAS]
-            if not next_alias:
-                break
-            self.unref_alias(query, alias)
-            alias = next_alias
-        
-        constraint.alias = alias

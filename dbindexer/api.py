@@ -18,6 +18,7 @@ def register_index(model, mapping):
         # create indexes and add model and field_name to lookups
         # create ExtraFieldLookup instances on the fly if needed
         for lookup in lookups:
+            lookup_def = None
             if not isinstance(lookup, ExtraFieldLookup):
                 lookup_def = lookup
                 lookup = create_lookup(lookup_def)

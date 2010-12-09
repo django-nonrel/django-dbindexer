@@ -1,6 +1,5 @@
 from django.db import models
 from djangotoolbox.fields import ListField
-from resolver import resolver
 from copy import deepcopy 
 
 import re

@@ -30,9 +30,9 @@ register_index(Indexed, {
     'tags': ('iexact', 'icontains', StandardLookup(), ),
 #    'foreignkey': 'iexact',
     'foreignkey__title': 'iexact',
-#    'foreignkey__name_fi': 'iexact',
-#    'foreignkey__fk__name_fi2': 'iexact',
-#    'foreignkey2__name_fi2': (StandardLookup(), ),
+    'foreignkey__name_fi': 'iexact',
+    'foreignkey__fk__name_fi2': 'iexact',
+    'foreignkey2__name_fi2': (StandardLookup(), ),
     'foreignkey2__age': (StandardLookup(), )
 })
 
@@ -50,26 +50,26 @@ class TestIndexed(TestCase):
                 foreignkey2=juubi).save()
 
     def test_joins(self):
-#        self.assertEqual(3, len(Indexed.objects.all().filter(
-#            foreignkey__fk__name_fi2__iexact='juuBi',
-#            foreignkey__title__iexact='biJuu')))
-#        self.assertEqual(3, len(Indexed.objects.all().filter(
-#            foreignkey__name_fi__iexact='kyuuBi',
-#            foreignkey__title__iexact='biJuu')))
+        self.assertEqual(3, len(Indexed.objects.all().filter(
+            foreignkey__fk__name_fi2__iexact='juuBi',
+            foreignkey__title__iexact='biJuu')))
+        self.assertEqual(3, len(Indexed.objects.all().filter(
+            foreignkey__name_fi__iexact='kyuuBi',
+            foreignkey__title__iexact='biJuu')))
         self.assertEqual(3, len(Indexed.objects.all().filter(
             foreignkey__title__iexact='biJuu')))
-#        self.assertEqual(1, len(Indexed.objects.all().filter(
-#            foreignkey__title__iexact='biJuu', name__iendswith='iMe')))
-#        self.assertEqual(3, len(Indexed.objects.all().filter(
-#            foreignkey__fk__name_fi2__iexact='juuBi')))
-#        self.assertEqual(3, len(Indexed.objects.all().filter(
-#           foreignkey2__name_fi2='Juubi')))
-#        
-#        # test multiple standard lookups
+        self.assertEqual(1, len(Indexed.objects.all().filter(
+            foreignkey__title__iexact='biJuu', name__iendswith='iMe')))
+        self.assertEqual(3, len(Indexed.objects.all().filter(
+            foreignkey__fk__name_fi2__iexact='juuBi')))
+        self.assertEqual(3, len(Indexed.objects.all().filter(
+           foreignkey2__name_fi2='Juubi')))
+        
+        # test multiple standard lookups
         self.assertEqual(3, len(Indexed.objects.all().filter(
             foreignkey2__age=2)))
-#        self.assertEqual(3, len(Indexed.objects.all().filter(
-#            foreignkey2__age__lt=3)))
+        self.assertEqual(3, len(Indexed.objects.all().filter(
+            foreignkey2__age__lt=3)))
 
     def test_fix_fk_isnull(self):
         self.assertEqual(0, len(Indexed.objects.filter(foreignkey=None)))
