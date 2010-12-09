@@ -32,7 +32,7 @@ register_index(Indexed, {
     'foreignkey__title': 'iexact',
     'foreignkey__name_fi': 'iexact',
     'foreignkey__fk__name_fi2': 'iexact',
-    'foreignkey2__name_fi2': (StandardLookup(), ),
+    'foreignkey2__name_fi2': (StandardLookup(), 'iexact', ),
     'foreignkey2__age': (StandardLookup(), )
 })
 
@@ -61,11 +61,15 @@ class TestIndexed(TestCase):
         self.assertEqual(1, len(Indexed.objects.all().filter(
             foreignkey__title__iexact='biJuu', name__iendswith='iMe')))
         self.assertEqual(3, len(Indexed.objects.all().filter(
-            foreignkey__fk__name_fi2__iexact='juuBi')))
-        self.assertEqual(3, len(Indexed.objects.all().filter(
            foreignkey2__name_fi2='Juubi')))
         
-        # test multiple standard lookups
+        # test JOINs via different paths targeting the same field
+        self.assertEqual(3, len(Indexed.objects.all().filter(
+            foreignkey__fk__name_fi2__iexact='juuBi')))
+        self.assertEqual(3, len(Indexed.objects.all().filter(
+           foreignkey2__name_fi2__iexact='Juubi')))
+        
+        # test standard lookups for foreign_keys
         self.assertEqual(3, len(Indexed.objects.all().filter(
             foreignkey2__age=2)))
         self.assertEqual(3, len(Indexed.objects.all().filter(

@@ -27,9 +27,13 @@ class BaseResolver(object):
                 isinstance(config_field, models.CharField):
             config_field.max_length = field_to_index.max_length
             
-        lookup.model.add_to_class(self.index_name(lookup), index_field)
-        self.index_map[lookup] = index_field
-        self.add_column_to_name(lookup.model, lookup.field_name)
+        # don't install a field if it already exists
+        try:
+            lookup.model._meta.get_field(self.index_name(lookup))
+        except:
+            lookup.model.add_to_class(self.index_name(lookup), index_field)
+            self.index_map[lookup] = index_field
+            self.add_column_to_name(lookup.model, lookup.field_name)
 
     def convert_query(self, query):
         '''Converts a database saving query.'''
@@ -55,10 +59,11 @@ class BaseResolver(object):
             for lookup in self.index_map.keys():
                 if lookup.matches_filter(query.model, field_name, lookup_type,
                                          value):
-                    lookup_type, value = lookup.convert_lookup(value, lookup_type)
+                    new_lookup_type, new_value = lookup.convert_lookup(value,
+                                                                       lookup_type)
                     index_name = self.index_name(lookup)
                     self._convert_filter(query, filters, child, index,
-                                         lookup_type, value, index_name)
+                                         new_lookup_type, new_value, index_name)
                 
     ''' helper methods '''
     
@@ -174,15 +179,16 @@ class JOINResolver(BaseResolver):
 
         if field_name is None:
             return
-
+        
         for lookup in self.index_map.keys():
             if lookup.matches_filter(query.model, field_name, lookup_type,
                                      value):
                 self.resolve_join(query, filters, child, index)
-                lookup_type, value = lookup.convert_lookup(value, lookup_type)
+                new_lookup_type, new_value = lookup.convert_lookup(value,
+                                                                   lookup_type)
                 index_name = self.index_name(lookup)
-                self._convert_filter(query, filters, child, index, lookup_type,
-                             value, index_name)
+                self._convert_filter(query, filters, child, index,
+                                     new_lookup_type, new_value, index_name)
     
     def get_field_to_index(self, model, field_name):
         model = self.get_model_chain(model, field_name)[-1]
