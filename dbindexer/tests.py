@@ -65,6 +65,9 @@ class TestIndexed(TestCase):
 #                       for item in Indexed._meta.get_fields_with_model()]
 #        print field_list
 #        x()
+        # in-memory JOIN backend shouldn't create multiple indexes on the foreignkey side
+        # for different paths or not even for index definition on different models. Test this!
+        # standard JOIN backend should always add extra fields to registered model. Test this!
     
     def test_joins(self):
         self.assertEqual(3, len(Indexed.objects.all().filter(
