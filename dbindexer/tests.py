@@ -27,15 +27,25 @@ register_index(Indexed, {
              'icontains', re.compile('^i+', re.I), re.compile('^I+'),
              re.compile('^i\d*i$', re.I)),
     'published': ('month', 'day', 'year', 'week_day'),
-    'tags': ('iexact', 'icontains', StandardLookup(), ),
+    'tags': ('iexact', 'icontains', StandardLookup() ),
 #    'foreignkey': 'iexact',
     'foreignkey__title': 'iexact',
     'foreignkey__name_fi': 'iexact',
-    'foreignkey__fk__name_fi2': 'iexact',
-    'foreignkey2__name_fi2': (StandardLookup(), 'iexact', ),
-    'foreignkey2__age': (StandardLookup(), )
+    'foreignkey__fk__name_fi2': ('iexact', 'endswith'),
+    'foreignkey2__name_fi2': (StandardLookup(), 'iexact'),
+    'foreignkey2__age': (StandardLookup())
 })
 
+register_index(ForeignIndexed, {
+    'title': 'iexact',
+    'name_fi': ('iexact', 'icontains'),
+    'fk__name_fi2': ('iexact', 'endswith'),
+    'fk__age': (StandardLookup()),
+})
+
+# TODO: add test for foreign key with multiple filters via different and equal paths
+# to do so we have to create some entities matching equal paths but not matching
+# different paths
 class TestIndexed(TestCase):
     def setUp(self):
         juubi = ForeignIndexed2(name_fi2='Juubi', age=2)
@@ -49,6 +59,13 @@ class TestIndexed(TestCase):
         Indexed(name='I1038593i', tags=('Sharingan'), foreignkey=kyuubi,
                 foreignkey2=juubi).save()
 
+    # TODO: add tests for created indexes for all backends!
+#    def test_model_fields(self):
+#        field_list = [(item[0], item[0].column) 
+#                       for item in Indexed._meta.get_fields_with_model()]
+#        print field_list
+#        x()
+    
     def test_joins(self):
         self.assertEqual(3, len(Indexed.objects.all().filter(
             foreignkey__fk__name_fi2__iexact='juuBi',
@@ -63,6 +80,10 @@ class TestIndexed(TestCase):
         self.assertEqual(3, len(Indexed.objects.all().filter(
            foreignkey2__name_fi2='Juubi')))
         
+        # text endswith instead iexact all the time :)
+        self.assertEqual(3, len(Indexed.objects.all().filter(
+            foreignkey__fk__name_fi2__endswith='bi')))
+        
         # test JOINs via different paths targeting the same field
         self.assertEqual(3, len(Indexed.objects.all().filter(
             foreignkey__fk__name_fi2__iexact='juuBi')))
@@ -74,6 +95,19 @@ class TestIndexed(TestCase):
             foreignkey2__age=2)))
         self.assertEqual(3, len(Indexed.objects.all().filter(
             foreignkey2__age__lt=3)))
+        
+        # test JOINs on different model
+        # standard lookups JOINs
+        self.assertEqual(1, len(ForeignIndexed.objects.all().filter(
+            fk__age=2)))
+        self.assertEqual(1, len(ForeignIndexed.objects.all().filter(
+            fk__age__lt=3)))
+        
+        # other JOINs
+        self.assertEqual(1, len(ForeignIndexed.objects.all().filter(
+            fk__name_fi2__iexact='juUBI')))
+        self.assertEqual(1, len(ForeignIndexed.objects.all().filter(
+            fk__name_fi2__endswith='bi')))            
 
     def test_fix_fk_isnull(self):
         self.assertEqual(0, len(Indexed.objects.filter(foreignkey=None)))
@@ -82,6 +116,9 @@ class TestIndexed(TestCase):
     def test_iexact(self):
         self.assertEqual(1, len(Indexed.objects.filter(name__iexact='itaChi')))
         self.assertEqual(1, Indexed.objects.filter(name__iexact='itaChi').count())
+        
+        self.assertEqual(1, ForeignIndexed.objects.filter(title__iexact='BIJUU').count())
+        self.assertEqual(1, ForeignIndexed.objects.filter(name_fi__iexact='KYuubi').count())
         
         # test on list field
         self.assertEqual(1, Indexed.objects.filter(tags__iexact='SasuKE').count())
@@ -121,6 +158,8 @@ class TestIndexed(TestCase):
 #        # passes on production but not on gae-sdk (development)
 #        self.assertEqual(1, len(Indexed.objects.all().filter(name__contains='Aim')))
 #        self.assertEqual(1, len(Indexed.objects.all().filter(name__icontains='aim')))
+#
+#        self.assertEqual(1, ForeignIndexed.objects.filter(name_fi__icontains='Yu').count())
 #
 #        # test icontains on a list
 #        self.assertEqual(2, len(Indexed.objects.all().filter(tags__icontains='RA')))

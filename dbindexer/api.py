@@ -3,6 +3,7 @@ import lookups as lookups_module
 from resolver import resolver
 import inspect
 
+# TODO: add possibility to add lookup modules
 def create_lookup(lookup_def):
     for _, cls in inspect.getmembers(lookups_module):
         if inspect.isclass(cls) and issubclass(cls, ExtraFieldLookup) and \

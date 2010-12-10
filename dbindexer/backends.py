@@ -157,8 +157,6 @@ class PKNullFix(BaseResolver):
     def convert_query(self, query):
         pass
 
-# TODO: JOIN backend should be configurable per field i.e. in-memory or immutable
-# or should it be done via another backend?
 class JOINResolver(BaseResolver):
     def create_index(self, lookup):
         if '__' in lookup.field_name:
@@ -263,6 +261,11 @@ class JOINResolver(BaseResolver):
         constraint.alias = alias
 
 # TODO: distinguish in memory joins from standard joins somehow
+# add possibility to add additional filters on the to-one side CAUTION: efficient
+# only if the paths of the filters to the to-one side are the same (without the last
+# field). This can be translated to an and (because paths are the same). With different
+# pats the results have to be merged i.e. first follow first path and fetch then follow
+# next path and fetch and then merge.
 class InMemoryJOINResolver(JOINResolver):
     def create_index(self, lookup):
         if '__' in lookup.field_name:
@@ -286,7 +289,7 @@ class InMemoryJOINResolver(JOINResolver):
     
     def index_name(self, lookup):
         # use another index_name to avoid conflicts with lookups defined on the
-        # target model
+        # target model which are handled by the BaseBackend
         return lookup.index_name + '_in_memory_join'
     
     def convert_query(self, query):
@@ -308,6 +311,7 @@ class InMemoryJOINResolver(JOINResolver):
         
         pks = self.get_pks(query, field_chain, lookup_type, value)
         self.resolve_join(query, filters, child, index)
+        # TODO: what happens if pks is empty?
         self._convert_filter(query, filters, child, index, 'in',
                              (pk for pk in pks), field_chain.split('__')[0])
         
@@ -320,5 +324,6 @@ class InMemoryJOINResolver(JOINResolver):
         
         for model, field_name in reversed(zip(model_chain[1:-1], field_names[1:-1])):
             lookup = {'%s__%s' %(field_name, 'in'):(pk for pk in pks)}
+            # TODO: what if pks is empty?
             pks = model.objects.all().filter(**lookup)
         return pks
