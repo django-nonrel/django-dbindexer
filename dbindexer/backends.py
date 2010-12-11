@@ -2,6 +2,7 @@ from django.db import models
 from django.db.models.fields import FieldDoesNotExist
 from django.db.models.sql.constants import JOIN_TYPE, LHS_ALIAS, LHS_JOIN_COL, \
     TABLE_NAME, RHS_JOIN_COL
+from django.utils.tree import Node
 from djangotoolbox.fields import ListField
 from dbindexer.lookups import StandardLookup
 
@@ -49,7 +50,15 @@ class BaseResolver(object):
             value = self.get_value(lookup.model, lookup.field_name, query)
             value = lookup.convert_value(value)
             query.values[position] = (self.get_index(lookup), value)
-            
+    
+    def convert_filters(self, query, filters):
+        model = query.model
+        for index, child in enumerate(filters.children[:]):
+            if isinstance(child, Node):
+                self.convert_filters(query, child)
+                continue
+
+            self.convert_filter(query, filters, child, index)
     
     def convert_filter(self, query, filters, child, index):
         constraint, lookup_type, annotation, value = child
@@ -324,6 +333,6 @@ class InMemoryJOINResolver(JOINResolver):
         
         for model, field_name in reversed(zip(model_chain[1:-1], field_names[1:-1])):
             lookup = {'%s__%s' %(field_name, 'in'):(pk for pk in pks)}
-            # TODO: what if pks is empty?
+            # TODO: what haens if pks is empty?
             pks = model.objects.all().filter(**lookup)
         return pks

@@ -1,4 +1,3 @@
-from django.utils.tree import Node
 from resolver import resolver
 
 def __repr__(self):
@@ -16,14 +15,7 @@ Constraint.__repr__ = __repr__
 
 class BaseCompiler(object):
     def convert_filters(self, filters):
-        model = self.query.model
-        for index, child in enumerate(filters.children[:]):
-            if isinstance(child, Node):
-                self.convert_filters(child)
-                continue
-
-            constraint, lookup_type, annotation, value = child
-            resolver.convert_filter(self.query, filters, child, index)
+        resolver.convert_filters(self.query, filters)
 
 class SQLCompiler(BaseCompiler):
     def execute_sql(self, *args, **kwargs):
