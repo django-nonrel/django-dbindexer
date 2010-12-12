@@ -6,6 +6,7 @@ from django.utils.tree import Node
 from djangotoolbox.fields import ListField
 from dbindexer.lookups import StandardLookup
 
+# TODO: optimize code (JOIN backend is somehow slow), cache, ...
 class BaseResolver(object):
     def __init__(self):
         # mapping from lookups to indexes
@@ -52,14 +53,15 @@ class BaseResolver(object):
             query.values[position] = (self.get_index(lookup), value)
     
     def convert_filters(self, query, filters):
-        model = query.model
         for index, child in enumerate(filters.children[:]):
             if isinstance(child, Node):
                 self.convert_filters(query, child)
                 continue
 
             self.convert_filter(query, filters, child, index)
-    
+
+    ''' helper methods '''
+
     def convert_filter(self, query, filters, child, index):
         constraint, lookup_type, annotation, value = child
         field_name = self.column_to_name.get(constraint.field.column)
@@ -73,8 +75,6 @@ class BaseResolver(object):
                     index_name = self.index_name(lookup)
                     self._convert_filter(query, filters, child, index,
                                          new_lookup_type, new_value, index_name)
-                
-    ''' helper methods '''
     
     def index_name(self, lookup):
         return lookup.index_name
@@ -178,17 +178,13 @@ class JOINResolver(BaseResolver):
     
     def convert_filter(self, query, filters, child, index):
         constraint, lookup_type, annotation, value = child
-        if constraint.field is None:
-            return
-        
-        column_index = self.get_column_index(query, constraint)
-        field_name = self.column_to_name.get(column_index)
+        field_chain = self.get_field_chain(query, constraint)
 
-        if field_name is None:
+        if field_chain is None:
             return
         
         for lookup in self.index_map.keys():
-            if lookup.matches_filter(query.model, field_name, lookup_type,
+            if lookup.matches_filter(query.model, field_chain, lookup_type,
                                      value):
                 self.resolve_join(query, filters, child, index)
                 new_lookup_type, new_value = lookup.convert_lookup(value,
@@ -208,7 +204,14 @@ class JOINResolver(BaseResolver):
         if value is not None:
             value = self.get_target_value(model, field_name, value)
         return value        
-    
+
+    def get_field_chain(self, query, constraint):
+        if constraint.field is None:
+            return
+
+        column_index = self.get_column_index(query, constraint)
+        return self.column_to_name.get(column_index)
+
     def get_model_chain(self, model, field_chain):
         model_chain = [model, ]
         for value in field_chain.split('__')[:-1]:
@@ -295,7 +298,15 @@ class InMemoryJOINResolver(JOINResolver):
             lookup.model = model
             lookup.field_name = lookup.field_name.split('__')[-1]
             BaseResolver.create_index(self, lookup)
-    
+
+    def convert_filters(self, query, filters):
+        # TODO: tricky bug here :)
+        # temporary save field_chains for the conversion of the current query
+#        self.field_chains = []
+#        self.field_chains = self.get_all_field_chains(query, filters)
+        print self.field_chains
+        BaseResolver.convert_filters(self, query, filters)
+
     def index_name(self, lookup):
         # use another index_name to avoid conflicts with lookups defined on the
         # target model which are handled by the BaseBackend
@@ -306,18 +317,14 @@ class InMemoryJOINResolver(JOINResolver):
     
     def convert_filter(self, query, filters, child, index):
         constraint, lookup_type, annotation, value = child
-        if constraint.field is None:
-            return
-        
-        column_index = self.get_column_index(query, constraint)
-        field_chain = self.column_to_name.get(column_index)
+        field_chain = self.get_field_chain(query, constraint)
 
         if field_chain is None:
             return
         
         if '__' not in field_chain:
             return BaseResolver.convert_filter(self, query, filters, child, index)
-        
+
         pks = self.get_pks(query, field_chain, lookup_type, value)
         self.resolve_join(query, filters, child, index)
         # TODO: what happens if pks is empty?
@@ -327,7 +334,13 @@ class InMemoryJOINResolver(JOINResolver):
     def get_pks(self, query, field_chain, lookup_type, value):
         model_chain = self.get_model_chain(query.model, field_chain)
         field_names = field_chain.split('__')
+        
         first_lookup = {'%s__%s' %(field_names[-1], lookup_type): value}
+        for chain, lookup_type, value, index in self.field_chains:
+            if field_chain.rsplit('__', 1)[0] in chain.rsplit('__', 1)[0]:
+                first_lookup['%s__%s' %(chain.rsplit('__', 1)[1], lookup_type)] \
+                    = value
+#        print self.field_chains, first_lookup
         pks = model_chain[-1].objects.all().filter(**first_lookup).values_list(
             'id', flat=True)
         
@@ -336,3 +349,15 @@ class InMemoryJOINResolver(JOINResolver):
             # TODO: what haens if pks is empty?
             pks = model.objects.all().filter(**lookup)
         return pks
+    
+    def get_all_field_chains(self, query, filters):
+        field_chains = []
+        for index, child in enumerate(filters.children[:]):
+            if isinstance(child, Node):
+                field_chains.extend(self.get_all_field_chains(query, child))
+                continue
+
+            constraint, lookup_type, annotation, value = child
+            field_chains.append((self.get_field_chain(query, constraint),
+                lookup_type, value, index))
+        return field_chains
