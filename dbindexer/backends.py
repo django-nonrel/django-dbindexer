@@ -166,6 +166,7 @@ class PKNullFix(BaseResolver):
     def convert_query(self, query):
         pass
 
+# TODO: fix slow JOINResolver
 class JOINResolver(BaseResolver):
     def create_index(self, lookup):
         if '__' in lookup.field_name:
@@ -279,6 +280,10 @@ class JOINResolver(BaseResolver):
 # pats the results have to be merged i.e. first follow first path and fetch then follow
 # next path and fetch and then merge.
 class InMemoryJOINResolver(JOINResolver):
+    def __init__(self):
+        self.field_chains = []
+        JOINResolver.__init__(self)
+
     def create_index(self, lookup):
         if '__' in lookup.field_name:
             field_to_index = self.get_field_to_index(lookup.model, lookup.field_name)
@@ -300,11 +305,10 @@ class InMemoryJOINResolver(JOINResolver):
             BaseResolver.create_index(self, lookup)
 
     def convert_filters(self, query, filters):
-        # TODO: tricky bug here :)
         # temporary save field_chains for the conversion of the current query
-#        self.field_chains = []
-#        self.field_chains = self.get_all_field_chains(query, filters)
-        print self.field_chains
+        # TODO: delete field_chains after all filters have been converted
+        if not self.field_chains:
+            self.field_chains = self.get_all_field_chains(query, filters)
         BaseResolver.convert_filters(self, query, filters)
 
     def index_name(self, lookup):
@@ -340,7 +344,7 @@ class InMemoryJOINResolver(JOINResolver):
             if field_chain.rsplit('__', 1)[0] in chain.rsplit('__', 1)[0]:
                 first_lookup['%s__%s' %(chain.rsplit('__', 1)[1], lookup_type)] \
                     = value
-#        print self.field_chains, first_lookup
+        print self.field_chains, first_lookup
         pks = model_chain[-1].objects.all().filter(**first_lookup).values_list(
             'id', flat=True)
         

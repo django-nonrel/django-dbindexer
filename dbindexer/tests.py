@@ -110,7 +110,7 @@ class TestIndexed(TestCase):
         self.assertEqual(1, len(ForeignIndexed.objects.all().filter(
             fk__name_fi2__iexact='juUBI')))
         self.assertEqual(1, len(ForeignIndexed.objects.all().filter(
-            fk__name_fi2__endswith='bi')))            
+            fk__name_fi2__endswith='bi')))
 
     def test_fix_fk_isnull(self):
         self.assertEqual(0, len(Indexed.objects.filter(foreignkey=None)))
