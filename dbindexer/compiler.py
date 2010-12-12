@@ -14,16 +14,16 @@ Constraint.__repr__ = __repr__
 # at runtime
 
 class BaseCompiler(object):
-    def convert_filters(self, filters):
-        resolver.convert_filters(self.query, filters)
+    def convert_filters(self):
+        resolver.convert_filters(self.query)
 
 class SQLCompiler(BaseCompiler):
     def execute_sql(self, *args, **kwargs):
-        self.convert_filters(self.query.where)
+        self.convert_filters()
         return super(SQLCompiler, self).execute_sql(*args, **kwargs)
 
     def results_iter(self):
-        self.convert_filters(self.query.where)
+        self.convert_filters()
         return super(SQLCompiler, self).results_iter()
 
 

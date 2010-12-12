@@ -21,9 +21,9 @@ class Resolver(object):
             raise ImproperlyConfigured('Module "%s" does not define a "%s" backend'
                 % (module_name, attr_name))
 
-    def convert_filters(self, query, filters):
+    def convert_filters(self, query):
         for backend in self.backends:
-            backend.convert_filters(query, filters)
+            backend.convert_filters(query)
 
     def create_index(self, lookup):
         for backend in self.backends:

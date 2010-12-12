@@ -52,15 +52,18 @@ class BaseResolver(object):
             value = lookup.convert_value(value)
             query.values[position] = (self.get_index(lookup), value)
     
-    def convert_filters(self, query, filters):
+    def convert_filters(self, query):
+        self._convert_filters(query, query.where)
+
+    ''' helper methods '''
+    
+    def _convert_filters(self, query, filters):
         for index, child in enumerate(filters.children[:]):
             if isinstance(child, Node):
-                self.convert_filters(query, child)
+                self._convert_filters(query, child)
                 continue
 
             self.convert_filter(query, filters, child, index)
-
-    ''' helper methods '''
 
     def convert_filter(self, query, filters, child, index):
         constraint, lookup_type, annotation, value = child
@@ -75,10 +78,7 @@ class BaseResolver(object):
                     index_name = self.index_name(lookup)
                     self._convert_filter(query, filters, child, index,
                                          new_lookup_type, new_value, index_name)
-    
-    def index_name(self, lookup):
-        return lookup.index_name
-    
+        
     def _convert_filter(self, query, filters, child, index, new_lookup_type,
                         new_value, index_name):
         constraint, lookup_type, annotation, value = child
@@ -87,6 +87,9 @@ class BaseResolver(object):
         constraint.col = constraint.field.column
         child = constraint, lookup_type, annotation, value
         filters.children[index] = child
+    
+    def index_name(self, lookup):
+        return lookup.index_name
     
     def get_field_to_index(self, model, field_name):
         try:
@@ -134,6 +137,13 @@ class PKNullFix(BaseResolver):
         It becomes a JOIN with pk__isnull which won't work on nonrel DBs,
         so we rewrite the JOIN here.
     '''
+     
+    def create_index(self, lookup):
+        pass
+    
+    def convert_query(self, query):
+        pass
+    
     def convert_filter(self, query, filters, child, index):
         constraint, lookup_type, annotation, value = child
         if constraint.field is not None and lookup_type == 'isnull' and \
@@ -159,12 +169,6 @@ class PKNullFix(BaseResolver):
         alias = next_alias
         constraint.col = constraint.field.column
         constraint.alias = alias
-    
-    def create_index(self, lookup):
-        pass
-    
-    def convert_query(self, query):
-        pass
 
 # TODO: fix slow JOINResolver
 class JOINResolver(BaseResolver):
@@ -304,20 +308,15 @@ class InMemoryJOINResolver(JOINResolver):
             lookup.field_name = lookup.field_name.split('__')[-1]
             BaseResolver.create_index(self, lookup)
 
-    def convert_filters(self, query, filters):
-        # temporary save field_chains for the conversion of the current query
-        # TODO: delete field_chains after all filters have been converted
-        if not self.field_chains:
-            self.field_chains = self.get_all_field_chains(query, filters)
-        BaseResolver.convert_filters(self, query, filters)
-
-    def index_name(self, lookup):
-        # use another index_name to avoid conflicts with lookups defined on the
-        # target model which are handled by the BaseBackend
-        return lookup.index_name + '_in_memory_join'
-    
     def convert_query(self, query):
         BaseResolver.convert_query(self, query)
+    
+    def convert_filters(self, query):
+        # temporary save field_chains for the conversion of the current query
+        # TODO: delete field_chains after all filters have been converted
+        self.field_chains = []
+        self.field_chains = self.get_all_field_chains(query, query.where)
+        BaseResolver.convert_filters(self, query)
     
     def convert_filter(self, query, filters, child, index):
         constraint, lookup_type, annotation, value = child
@@ -335,22 +334,28 @@ class InMemoryJOINResolver(JOINResolver):
         self._convert_filter(query, filters, child, index, 'in',
                              (pk for pk in pks), field_chain.split('__')[0])
         
+    def index_name(self, lookup):
+        # use another index_name to avoid conflicts with lookups defined on the
+        # target model which are handled by the BaseBackend
+        return lookup.index_name + '_in_memory_join'
+    
     def get_pks(self, query, field_chain, lookup_type, value):
         model_chain = self.get_model_chain(query.model, field_chain)
         field_names = field_chain.split('__')
         
         first_lookup = {'%s__%s' %(field_names[-1], lookup_type): value}
-        for chain, lookup_type, value, index in self.field_chains:
-            if field_chain.rsplit('__', 1)[0] in chain.rsplit('__', 1)[0]:
-                first_lookup['%s__%s' %(chain.rsplit('__', 1)[1], lookup_type)] \
-                    = value
-        print self.field_chains, first_lookup
+#        for chain, lookup_type, value, index in self.field_chains:
+#            if field_chain.rsplit('__', 1)[0] in chain.rsplit('__', 1)[0]:
+#                first_lookup['%s__%s' %(chain.rsplit('__', 1)[1], lookup_type)] \
+#                    = value
+                #self.remove_filter()
+#        print self.field_chains, first_lookup
         pks = model_chain[-1].objects.all().filter(**first_lookup).values_list(
             'id', flat=True)
         
         for model, field_name in reversed(zip(model_chain[1:-1], field_names[1:-1])):
             lookup = {'%s__%s' %(field_name, 'in'):(pk for pk in pks)}
-            # TODO: what haens if pks is empty?
+            # TODO: what happens if pks is empty?
             pks = model.objects.all().filter(**lookup)
         return pks
     
