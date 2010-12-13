@@ -136,7 +136,7 @@ class TestIndexed(TestCase):
     def test_delete_query(self):
         Indexed.objects.all().delete()
         self.assertEqual(0, Indexed.objects.all().filter(name__iexact='itaChi').count())
-#
+
     def test_istartswith(self):
         self.assertEqual(1, len(Indexed.objects.all().filter(name__istartswith='iTa')))
 

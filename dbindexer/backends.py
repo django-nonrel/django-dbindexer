@@ -191,7 +191,7 @@ class JOINResolver(BaseResolver):
         for lookup in self.index_map.keys():
             if lookup.matches_filter(query.model, field_chain, lookup_type,
                                      value):
-                self.resolve_join(query, filters, child, index)
+                self.resolve_join(query, child)
                 new_lookup_type, new_value = lookup.convert_lookup(value,
                                                                    lookup_type)
                 index_name = self.index_name(lookup)
@@ -262,7 +262,7 @@ class JOINResolver(BaseResolver):
                     alias = None
         return '__'.join(reversed(column_chain.split('__')))
 
-    def resolve_join(self, query, filters, child, index):
+    def resolve_join(self, query, child):
         constraint, lookup_type, annotation, value = child
         if not constraint.field:
             return
@@ -311,13 +311,6 @@ class InMemoryJOINResolver(JOINResolver):
     def convert_query(self, query):
         BaseResolver.convert_query(self, query)
     
-    def convert_filters(self, query):
-        # temporary save field_chains for the conversion of the current query
-        # TODO: delete field_chains after all filters have been converted
-        self.field_chains = []
-        self.field_chains = self.get_all_field_chains(query, query.where)
-        BaseResolver.convert_filters(self, query)
-    
     def convert_filter(self, query, filters, child, index):
         constraint, lookup_type, annotation, value = child
         field_chain = self.get_field_chain(query, constraint)
@@ -327,9 +320,9 @@ class InMemoryJOINResolver(JOINResolver):
         
         if '__' not in field_chain:
             return BaseResolver.convert_filter(self, query, filters, child, index)
-
+        
         pks = self.get_pks(query, field_chain, lookup_type, value)
-        self.resolve_join(query, filters, child, index)
+        self.resolve_join(query, child)
         # TODO: what happens if pks is empty?
         self._convert_filter(query, filters, child, index, 'in',
                              (pk for pk in pks), field_chain.split('__')[0])
@@ -344,12 +337,7 @@ class InMemoryJOINResolver(JOINResolver):
         field_names = field_chain.split('__')
         
         first_lookup = {'%s__%s' %(field_names[-1], lookup_type): value}
-#        for chain, lookup_type, value, index in self.field_chains:
-#            if field_chain.rsplit('__', 1)[0] in chain.rsplit('__', 1)[0]:
-#                first_lookup['%s__%s' %(chain.rsplit('__', 1)[1], lookup_type)] \
-#                    = value
-                #self.remove_filter()
-#        print self.field_chains, first_lookup
+        first_lookup.update(self.combine_with_other_filter(query, field_chain))
         pks = model_chain[-1].objects.all().filter(**first_lookup).values_list(
             'id', flat=True)
         
@@ -359,14 +347,49 @@ class InMemoryJOINResolver(JOINResolver):
             pks = model.objects.all().filter(**lookup)
         return pks
     
-    def get_all_field_chains(self, query, filters):
-        field_chains = []
+    def combine_with_other_filter(self, query, field_chain):
+        lookups = {}
+        field_chains = self.get_all_field_chains(query, query.where)
+
+        for chain, child in field_chains.items():
+            if chain == field_chain:
+                continue
+            if field_chain.rsplit('__', 1)[0] == chain.rsplit('__', 1)[0]:
+                lookups['%s__%s' %(chain.rsplit('__', 1)[1], child[1])] = child[3]
+                
+                self.remove_child(query.where, child)
+                self.resolve_join(query, child)
+                # TODO: update query.alias_refcount correctly!
+        return lookups
+                
+    def remove_child(self, filters, to_remove):
+        for child in filters.children[:]:
+            if child is to_remove:
+                self._remove_child(filters, to_remove)
+                return
+            elif isinstance(child, Node):
+                self.remove_child(child, to_remove)
+            
+            if hasattr(child, 'children') and not child.children:
+                self.remove_child(filters, child)
+    
+    def _remove_child(self, filters, to_remove):
+        result = []
+        for child in filters.children[:]:
+            if child is to_remove:
+                continue
+            result.append(child)
+        filters.children = result
+    
+    def get_all_field_chains(self, query, filters, parent_filters=None):
+        field_chains = {}
         for index, child in enumerate(filters.children[:]):
             if isinstance(child, Node):
-                field_chains.extend(self.get_all_field_chains(query, child))
+                field_chains.update(self.get_all_field_chains(query, child, filters))
                 continue
-
-            constraint, lookup_type, annotation, value = child
-            field_chains.append((self.get_field_chain(query, constraint),
-                lookup_type, value, index))
+            
+            field_chain = self.get_field_chain(query, child[0])
+            # field_chain can be None if the user didn't specified an index for it
+            if field_chain:
+                field_chains[field_chain] = child
         return field_chains
