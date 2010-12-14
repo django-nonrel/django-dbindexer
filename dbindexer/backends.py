@@ -6,6 +6,8 @@ from django.utils.tree import Node
 from djangotoolbox.fields import ListField
 from dbindexer.lookups import StandardLookup
 
+OR = 'OR'
+
 # TODO: optimize code (JOIN backend and in memory-JOINs are rather slow, cache?)
 class BaseResolver(object):
     def __init__(self):
@@ -306,15 +308,20 @@ class InMemoryJOINResolver(JOINResolver):
         BaseResolver.convert_query(self, query)
         
     def _convert_filters(self, query, filters):
-        # TODO: instead of the following code resort the tree!
+        # or queries are not supported for in-memory-JOINs
+        if self.contains_OR(query.where, OR):
+            return
+        
         # start with the deepest JOIN level filter!
         all_filters = self.get_all_filters(query, filters)
         all_filters.sort(key=lambda item: self.get_field_chain(query, item[1][0]) and \
                          -len(self.get_field_chain(query, item[1][0])) or 0)
-
-        for filters, child, index in all_filters:
-            self.convert_filter(query, filters, child, index)
         
+        for filters, child, index in all_filters:
+            if not self.contains_child(query.where, child):
+                continue
+            self.convert_filter(query, filters, child, index)
+    
     def convert_filter(self, query, filters, child, index):
         constraint, lookup_type, annotation, value = child
         field_chain = self.get_field_chain(query, constraint)
@@ -331,6 +338,25 @@ class InMemoryJOINResolver(JOINResolver):
         self._convert_filter(query, filters, child, index, 'in',
                              (pk for pk in pks), field_chain.split('__')[0])
         
+    def tree_contains(self, filters, to_find, func):
+        result = False
+        for index, child in enumerate(filters.children[:]):
+            if func(child, to_find):
+                result = True
+                break
+            if isinstance(child, Node):
+                 result = self.tree_contains(child, to_find, func)
+                 if result:
+                     break
+        return result
+    
+    def contains_OR(self, filters, or_):
+        return self.tree_contains(filters, or_,
+            lambda c, f: isinstance(c, Node) and c.connector == f)
+
+    def contains_child(self, filters, to_find):
+        return self.tree_contains(filters, to_find, lambda c, f: c is f)
+    
     def get_all_filters(self, query, filters):
         all_filters = []
         for index, child in enumerate(filters.children[:]):
