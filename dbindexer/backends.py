@@ -8,7 +8,7 @@ from dbindexer.lookups import StandardLookup
 
 OR = 'OR'
 
-# TODO: optimize code (JOIN backend and in memory-JOINs are rather slow, cache?)
+# TODO: optimize code
 class BaseResolver(object):
     def __init__(self):
         # mapping from lookups to indexes
@@ -318,7 +318,7 @@ class InMemoryJOINResolver(JOINResolver):
                          -len(self.get_field_chain(query, item[1][0])) or 0)
         
         for filters, child, index in all_filters:
-            # check if convert_filter removed a given child from the where tree
+            # check if convert_filter removed a given child from the where-tree
             if not self.contains_child(query.where, child):
                 continue
             self.convert_filter(query, filters, child, index)
@@ -335,7 +335,6 @@ class InMemoryJOINResolver(JOINResolver):
         
         pks = self.get_pks(query, field_chain, lookup_type, value)
         self.resolve_join(query, child)
-        # TODO: what happens if pks is empty?
         self._convert_filter(query, filters, child, index, 'in',
                              (pk for pk in pks), field_chain.split('__')[0])
         

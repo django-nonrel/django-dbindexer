@@ -50,16 +50,23 @@ class TestIndexed(TestCase):
     def setUp(self):
         juubi = ForeignIndexed2(name_fi2='Juubi', age=2)
         juubi.save()
-
-        kyuubi = ForeignIndexed(name_fi='Kyuubi', title='Bijuu', fk=juubi)
-        kyuubi.save()
+        rikudo = ForeignIndexed2(name_fi2='Rikudo', age=200)
+        rikudo.save()
         
+        kyuubi = ForeignIndexed(name_fi='Kyuubi', title='Bijuu', fk=juubi)
+        hachibi= ForeignIndexed(name_fi='Hachibi', title='Bijuu', fk=rikudo)
+        kyuubi.save()
+        hachibi.save()
+                
         Indexed(name='ItAchi', tags=('Sasuke', 'Madara'), foreignkey=kyuubi,
                 foreignkey2=juubi).save()
         Indexed(name='YondAimE', tags=('Naruto', 'Jiraya'), foreignkey=kyuubi,
                 foreignkey2=juubi).save()
-        Indexed(name='I1038593i', tags=('Sharingan'), foreignkey=kyuubi,
+        Indexed(name='Neji', tags=('Hinata'), foreignkey=hachibi,
                 foreignkey2=juubi).save()
+        Indexed(name='I1038593i', tags=('Sharingan'), foreignkey=hachibi,
+                foreignkey2=rikudo).save()
+                
         
     # TODO: add tests for created indexes for all backends!
 #    def test_model_fields(self):
@@ -72,28 +79,41 @@ class TestIndexed(TestCase):
         # standard JOIN backend should always add extra fields to registered model. Test this!
     
     def test_joins(self):
-        self.assertEqual(3, len(Indexed.objects.all().filter(
+        self.assertEqual(2, len(Indexed.objects.all().filter(
             foreignkey__fk__name_fi2__iexact='juuBi',
             foreignkey__title__iexact='biJuu')))
-        self.assertEqual(3, len(Indexed.objects.all().filter(
+        
+        self.assertEqual(0, len(Indexed.objects.all().filter(
+            foreignkey__fk__name_fi2__iexact='juuBi',
+            foreignkey2__name_fi2__iexact='Rikudo')))
+        
+        self.assertEqual(1, len(Indexed.objects.all().filter(
+            foreignkey__fk__name_fi2__endswith='udo',
+            foreignkey2__name_fi2__iexact='Rikudo')))
+        
+        self.assertEqual(2, len(Indexed.objects.all().filter(
             foreignkey__title__iexact='biJuu',
             foreignkey__name_fi__iexact='kyuuBi')))
+        
+        self.assertEqual(2, len(Indexed.objects.all().filter(
+            foreignkey__title__iexact='biJuu',
+            foreignkey__name_fi__iexact='Hachibi')))
                 
         self.assertEqual(1, len(Indexed.objects.all().filter(
             foreignkey__title__iexact='biJuu', name__iendswith='iMe')))
         
         # JOINs on one field only
-        self.assertEqual(3, len(Indexed.objects.all().filter(
+        self.assertEqual(4, len(Indexed.objects.all().filter(
             foreignkey__title__iexact='biJuu')))
         self.assertEqual(3, len(Indexed.objects.all().filter(
            foreignkey2__name_fi2='Juubi')))
         
         # text endswith instead iexact all the time :)
-        self.assertEqual(3, len(Indexed.objects.all().filter(
+        self.assertEqual(2, len(Indexed.objects.all().filter(
             foreignkey__fk__name_fi2__endswith='bi')))
         
         # test JOINs via different paths targeting the same field
-        self.assertEqual(3, len(Indexed.objects.all().filter(
+        self.assertEqual(2, len(Indexed.objects.all().filter(
             foreignkey__fk__name_fi2__iexact='juuBi')))
         self.assertEqual(3, len(Indexed.objects.all().filter(
            foreignkey2__name_fi2__iexact='Juubi')))
@@ -101,15 +121,15 @@ class TestIndexed(TestCase):
         # test standard lookups for foreign_keys
         self.assertEqual(3, len(Indexed.objects.all().filter(
             foreignkey2__age=2)))
-        self.assertEqual(3, len(Indexed.objects.all().filter(
-            foreignkey2__age__lt=3)))
+        self.assertEqual(4, len(Indexed.objects.all().filter(
+            foreignkey2__age__lt=201)))
         
         # test JOINs on different model
         # standard lookups JOINs
         self.assertEqual(1, len(ForeignIndexed.objects.all().filter(
             fk__age=2)))
-        self.assertEqual(1, len(ForeignIndexed.objects.all().filter(
-            fk__age__lt=3)))
+        self.assertEqual(2, len(ForeignIndexed.objects.all().filter(
+            fk__age__lt=210)))
         
         # other JOINs
         self.assertEqual(1, len(ForeignIndexed.objects.all().filter(
@@ -119,13 +139,13 @@ class TestIndexed(TestCase):
 
     def test_fix_fk_isnull(self):
         self.assertEqual(0, len(Indexed.objects.filter(foreignkey=None)))
-        self.assertEqual(3, len(Indexed.objects.exclude(foreignkey=None)))
+        self.assertEqual(4, len(Indexed.objects.exclude(foreignkey=None)))
 
     def test_iexact(self):
         self.assertEqual(1, len(Indexed.objects.filter(name__iexact='itaChi')))
         self.assertEqual(1, Indexed.objects.filter(name__iexact='itaChi').count())
         
-        self.assertEqual(1, ForeignIndexed.objects.filter(title__iexact='BIJUU').count())
+        self.assertEqual(2, ForeignIndexed.objects.filter(title__iexact='BIJUU').count())
         self.assertEqual(1, ForeignIndexed.objects.filter(name_fi__iexact='KYuubi').count())
         
         # test on list field
@@ -156,10 +176,10 @@ class TestIndexed(TestCase):
 
     def test_date_filters(self):
         now = datetime.now()
-        self.assertEqual(3, len(Indexed.objects.all().filter(published__month=now.month)))
-        self.assertEqual(3, len(Indexed.objects.all().filter(published__day=now.day)))
-        self.assertEqual(3, len(Indexed.objects.all().filter(published__year=now.year)))
-        self.assertEqual(3, len(Indexed.objects.all().filter(
+        self.assertEqual(4, len(Indexed.objects.all().filter(published__month=now.month)))
+        self.assertEqual(4, len(Indexed.objects.all().filter(published__day=now.day)))
+        self.assertEqual(4, len(Indexed.objects.all().filter(published__year=now.year)))
+        self.assertEqual(4, len(Indexed.objects.all().filter(
             published__week_day=now.isoweekday())))
 
 #    def test_contains(self):
