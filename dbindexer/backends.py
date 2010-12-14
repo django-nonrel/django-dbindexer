@@ -318,6 +318,7 @@ class InMemoryJOINResolver(JOINResolver):
                          -len(self.get_field_chain(query, item[1][0])) or 0)
         
         for filters, child, index in all_filters:
+            # check if convert_filter removed a given child from the where tree
             if not self.contains_child(query.where, child):
                 continue
             self.convert_filter(query, filters, child, index)
@@ -374,21 +375,24 @@ class InMemoryJOINResolver(JOINResolver):
     
     def get_pks(self, query, field_chain, lookup_type, value):
         model_chain = self.get_model_chain(query.model, field_chain)
-        field_names = field_chain.split('__')
-        
-        first_lookup = {'%s__%s' %(field_names[-1], lookup_type): value}
-        self.combine_with_other_filter(first_lookup, query, field_chain)
+                
+        first_lookup = {'%s__%s' %(field_chain.rsplit('__', 1)[-1],
+                                   lookup_type): value}
+        self.combine_with_same_level_filter(first_lookup, query, field_chain)
         pks = model_chain[-1].objects.all().filter(**first_lookup).values_list(
             'id', flat=True)
-        #print first_lookup
-        for model, field_name in reversed(zip(model_chain[1:-1], field_names[1:-1])):
-            lookup = {'%s__%s' %(field_name, 'in'):(pk for pk in pks)}
-            #lookup.update(self.combine_with_other_filter(query, field_chain))
-#            print lookup
+
+        chains = [field_chain.rsplit('__', i+1)[0]
+                  for i in range(field_chain.count('__'))]
+        lookup = {}
+        for model, chain in reversed(zip(model_chain[1:-1], chains[:-1])):
+            lookup.update({'%s__%s' %(chain.rsplit('__', 1)[-1], 'in'):
+                           (pk for pk in pks)})
+            self.combine_with_same_level_filter(lookup, query, chain)
             pks = model.objects.all().filter(**lookup).values_list('id', flat=True)
         return pks
     
-    def combine_with_other_filter(self, lookup, query, field_chain):
+    def combine_with_same_level_filter(self, lookup, query, field_chain):
         lookup_updates = {}
         field_chains = self.get_all_field_chains(query, query.where)
 
