@@ -6,7 +6,7 @@ from django.utils.tree import Node
 from djangotoolbox.fields import ListField
 from dbindexer.lookups import StandardLookup
 
-# TODO: optimize code (JOIN backend is somehow slow), cache, ...
+# TODO: optimize code (JOIN backend and in memory-JOINs are rather slow, cache?)
 class BaseResolver(object):
     def __init__(self):
         # mapping from lookups to indexes
@@ -170,7 +170,6 @@ class PKNullFix(BaseResolver):
         constraint.col = constraint.field.column
         constraint.alias = alias
 
-# TODO: fix slow JOINResolver
 class JOINResolver(BaseResolver):
     def create_index(self, lookup):
         if '__' in lookup.field_name:
@@ -254,8 +253,8 @@ class JOINResolver(BaseResolver):
             column_chain = constraint.field.column
             alias = constraint.alias
             while alias:
-                join = query.alias_map[alias]
-                if join[JOIN_TYPE] == 'INNER JOIN':
+                join = query.alias_map.get(alias)
+                if join and join[JOIN_TYPE] == 'INNER JOIN':
                     column_chain += '__' + join[LHS_JOIN_COL]
                     alias = query.alias_map[alias][LHS_ALIAS]
                 else:
@@ -278,11 +277,6 @@ class JOINResolver(BaseResolver):
         constraint.alias = alias
 
 # TODO: distinguish in memory joins from standard joins somehow
-# add possibility to add additional filters on the to-one side CAUTION: efficient
-# only if the paths of the filters to the to-one side are the same (without the last
-# field). This can be translated to an and (because paths are the same). With different
-# pats the results have to be merged i.e. first follow first path and fetch then follow
-# next path and fetch and then merge.
 class InMemoryJOINResolver(JOINResolver):
     def __init__(self):
         self.field_chains = []
@@ -310,7 +304,17 @@ class InMemoryJOINResolver(JOINResolver):
 
     def convert_query(self, query):
         BaseResolver.convert_query(self, query)
-    
+        
+    def _convert_filters(self, query, filters):
+        # TODO: instead of the following code resort the tree!
+        # start with the deepest JOIN level filter!
+        all_filters = self.get_all_filters(query, filters)
+        all_filters.sort(key=lambda item: self.get_field_chain(query, item[1][0]) and \
+                         -len(self.get_field_chain(query, item[1][0])) or 0)
+
+        for filters, child, index in all_filters:
+            self.convert_filter(query, filters, child, index)
+        
     def convert_filter(self, query, filters, child, index):
         constraint, lookup_type, annotation, value = child
         field_chain = self.get_field_chain(query, constraint)
@@ -327,6 +331,16 @@ class InMemoryJOINResolver(JOINResolver):
         self._convert_filter(query, filters, child, index, 'in',
                              (pk for pk in pks), field_chain.split('__')[0])
         
+    def get_all_filters(self, query, filters):
+        all_filters = []
+        for index, child in enumerate(filters.children[:]):
+            if isinstance(child, Node):
+                all_filters.extend(self.get_all_filters(query, child))
+                continue
+
+            all_filters.append((filters, child, index))
+        return all_filters
+    
     def index_name(self, lookup):
         # use another index_name to avoid conflicts with lookups defined on the
         # target model which are handled by the BaseBackend
@@ -337,32 +351,37 @@ class InMemoryJOINResolver(JOINResolver):
         field_names = field_chain.split('__')
         
         first_lookup = {'%s__%s' %(field_names[-1], lookup_type): value}
-        first_lookup.update(self.combine_with_other_filter(query, field_chain))
+        self.combine_with_other_filter(first_lookup, query, field_chain)
         pks = model_chain[-1].objects.all().filter(**first_lookup).values_list(
             'id', flat=True)
-        
+        #print first_lookup
         for model, field_name in reversed(zip(model_chain[1:-1], field_names[1:-1])):
             lookup = {'%s__%s' %(field_name, 'in'):(pk for pk in pks)}
-            # TODO: what happens if pks is empty?
-            pks = model.objects.all().filter(**lookup)
+            #lookup.update(self.combine_with_other_filter(query, field_chain))
+#            print lookup
+            pks = model.objects.all().filter(**lookup).values_list('id', flat=True)
         return pks
     
-    def combine_with_other_filter(self, query, field_chain):
-        lookups = {}
+    def combine_with_other_filter(self, lookup, query, field_chain):
+        lookup_updates = {}
         field_chains = self.get_all_field_chains(query, query.where)
 
         for chain, child in field_chains.items():
             if chain == field_chain:
                 continue
             if field_chain.rsplit('__', 1)[0] == chain.rsplit('__', 1)[0]:
-                lookups['%s__%s' %(chain.rsplit('__', 1)[1], child[1])] = child[3]
+                lookup_updates ['%s__%s' %(chain.rsplit('__', 1)[1], child[1])] \
+                    = child[3]
                 
                 self.remove_child(query.where, child)
                 self.resolve_join(query, child)
                 # TODO: update query.alias_refcount correctly!
-        return lookups
+        lookup.update(lookup_updates)
                 
     def remove_child(self, filters, to_remove):
+        ''' Removes a child object from filters. If filters doesn't contain
+            children afterwoods, filters will be removed from its parent. '''
+            
         for child in filters.children[:]:
             if child is to_remove:
                 self._remove_child(filters, to_remove)
@@ -381,13 +400,12 @@ class InMemoryJOINResolver(JOINResolver):
             result.append(child)
         filters.children = result
     
-    def get_all_field_chains(self, query, filters, parent_filters=None):
+    def get_all_field_chains(self, query, filters):
+        ''' Returns a dict mapping from field_chains to the corresponding child.'''
+
         field_chains = {}
-        for index, child in enumerate(filters.children[:]):
-            if isinstance(child, Node):
-                field_chains.update(self.get_all_field_chains(query, child, filters))
-                continue
-            
+        all_filters = self.get_all_filters(query, filters)
+        for filters, child, index in all_filters:
             field_chain = self.get_field_chain(query, child[0])
             # field_chain can be None if the user didn't specified an index for it
             if field_chain:

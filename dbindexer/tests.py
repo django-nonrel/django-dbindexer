@@ -50,15 +50,17 @@ class TestIndexed(TestCase):
     def setUp(self):
         juubi = ForeignIndexed2(name_fi2='Juubi', age=2)
         juubi.save()
+
         kyuubi = ForeignIndexed(name_fi='Kyuubi', title='Bijuu', fk=juubi)
         kyuubi.save()
+        
         Indexed(name='ItAchi', tags=('Sasuke', 'Madara'), foreignkey=kyuubi,
                 foreignkey2=juubi).save()
         Indexed(name='YondAimE', tags=('Naruto', 'Jiraya'), foreignkey=kyuubi,
                 foreignkey2=juubi).save()
         Indexed(name='I1038593i', tags=('Sharingan'), foreignkey=kyuubi,
                 foreignkey2=juubi).save()
-
+        
     # TODO: add tests for created indexes for all backends!
 #    def test_model_fields(self):
 #        field_list = [(item[0], item[0].column) 
@@ -74,12 +76,15 @@ class TestIndexed(TestCase):
             foreignkey__fk__name_fi2__iexact='juuBi',
             foreignkey__title__iexact='biJuu')))
         self.assertEqual(3, len(Indexed.objects.all().filter(
-            foreignkey__name_fi__iexact='kyuuBi',
-            foreignkey__title__iexact='biJuu')))
-        self.assertEqual(3, len(Indexed.objects.all().filter(
-            foreignkey__title__iexact='biJuu')))
+            foreignkey__title__iexact='biJuu',
+            foreignkey__name_fi__iexact='kyuuBi')))
+                
         self.assertEqual(1, len(Indexed.objects.all().filter(
             foreignkey__title__iexact='biJuu', name__iendswith='iMe')))
+        
+        # JOINs on one field only
+        self.assertEqual(3, len(Indexed.objects.all().filter(
+            foreignkey__title__iexact='biJuu')))
         self.assertEqual(3, len(Indexed.objects.all().filter(
            foreignkey2__name_fi2='Juubi')))
         
