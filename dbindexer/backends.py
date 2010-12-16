@@ -101,7 +101,7 @@ class BaseResolver(object):
     
     def get_value(self, model, field_name, query):
         field_to_index = self.get_field_to_index(model, field_name)
-        for index, (query_field, value) in enumerate(query.values[:]):
+        for query_field, value in query.values[:]:
             if field_to_index == query_field:
                 return value
         raise FieldDoesNotExist('Cannot find field in query.')
@@ -340,14 +340,14 @@ class InMemoryJOINResolver(ConstantFieldJOINResolver):
         
     def tree_contains(self, filters, to_find, func):
         result = False
-        for index, child in enumerate(filters.children[:]):
+        for child in filters.children[:]:
             if func(child, to_find):
                 result = True
                 break
             if isinstance(child, Node):
-                 result = self.tree_contains(child, to_find, func)
-                 if result:
-                     break
+                result = self.tree_contains(child, to_find, func)
+                if result:
+                    break
         return result
     
     def contains_OR(self, filters, or_):
