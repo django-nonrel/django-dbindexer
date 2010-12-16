@@ -313,7 +313,7 @@ class InMemoryJOINResolver(JOINResolver):
             return
         
         # start with the deepest JOIN level filter!
-        all_filters = self.get_all_filters(query, filters)
+        all_filters = self.get_all_filters(filters)
         all_filters.sort(key=lambda item: self.get_field_chain(query, item[1][0]) and \
                          -len(self.get_field_chain(query, item[1][0])) or 0)
         
@@ -357,11 +357,11 @@ class InMemoryJOINResolver(JOINResolver):
     def contains_child(self, filters, to_find):
         return self.tree_contains(filters, to_find, lambda c, f: c is f)
     
-    def get_all_filters(self, query, filters):
+    def get_all_filters(self, filters):
         all_filters = []
         for index, child in enumerate(filters.children[:]):
             if isinstance(child, Node):
-                all_filters.extend(self.get_all_filters(query, child))
+                all_filters.extend(self.get_all_filters(child))
                 continue
 
             all_filters.append((filters, child, index))
@@ -433,7 +433,7 @@ class InMemoryJOINResolver(JOINResolver):
         ''' Returns a dict mapping from field_chains to the corresponding child.'''
 
         field_chains = {}
-        all_filters = self.get_all_filters(query, filters)
+        all_filters = self.get_all_filters(filters)
         for filters, child, index in all_filters:
             field_chain = self.get_field_chain(query, child[0])
             # field_chain can be None if the user didn't specified an index for it
