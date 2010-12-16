@@ -172,7 +172,7 @@ class PKNullFix(BaseResolver):
         constraint.col = constraint.field.column
         constraint.alias = alias
 
-class JOINResolver(BaseResolver):
+class ConstantFieldJOINResolver(BaseResolver):
     def create_index(self, lookup):
         if '__' in lookup.field_name:
             BaseResolver.create_index(self, lookup)
@@ -279,10 +279,10 @@ class JOINResolver(BaseResolver):
         constraint.alias = alias
 
 # TODO: distinguish in memory joins from standard joins somehow
-class InMemoryJOINResolver(JOINResolver):
+class InMemoryJOINResolver(ConstantFieldJOINResolver):
     def __init__(self):
         self.field_chains = []
-        JOINResolver.__init__(self)
+        ConstantFieldJOINResolver.__init__(self)
 
     def create_index(self, lookup):
         if '__' in lookup.field_name:
