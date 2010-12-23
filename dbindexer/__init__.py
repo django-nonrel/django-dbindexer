@@ -1,8 +1,3 @@
-from django.conf import settings
-from django.utils.importlib import import_module
-
-_MODULE_NAMES = getattr(settings, 'DB_INDEX_MODULES', ())
-
 def autodiscover():
     """
     Automatically loads database index definitions from db_indexes modules in
@@ -41,7 +36,10 @@ def autodiscover():
         import_module("%s.dbindexes" % app)
 
 def load_indexes():
-    for name in _MODULE_NAMES:
+    from django.conf import settings
+    from django.utils.importlib import import_module
+
+    for name in getattr(settings, 'DB_INDEX_MODULES', ()):
         try:
             import_module(name)
         except ImportError:
