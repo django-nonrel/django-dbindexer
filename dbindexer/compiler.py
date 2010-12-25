@@ -1,5 +1,4 @@
 from .api import FIELD_INDEXES, COLUMN_TO_NAME, get_index_name, get_column_name, regex
-from django.conf import settings
 from django.db import models
 from django.db.models.sql import aggregates as sqlaggregates
 from django.db.models.sql.constants import LOOKUP_SEP, MULTI, SINGLE, LHS_ALIAS,\
@@ -9,8 +8,6 @@ from django.db.utils import DatabaseError, IntegrityError
 from django.utils.importlib import import_module
 from django.utils.tree import Node
 import re
-
-SITECONF_MODULE = getattr(settings, 'DBINDEXER_SITECONF', settings.ROOT_URLCONF)
 
 def contains_indexer(value):
     # In indexing mode we add all postfixes ('o', 'lo', ..., 'hello')
@@ -70,10 +67,6 @@ Constraint.__repr__ = __repr__
 # manipulated query can result in strange behavior for these cases!
 
 class BaseCompiler(object):
-    def __init__(self, *args, **kwargs):
-        super(BaseCompiler, self).__init__(*args, **kwargs)
-        import_module(SITECONF_MODULE)
-
     def get_column_index(self, constraint):
         if constraint.field:
             column_chain = constraint.field.column
