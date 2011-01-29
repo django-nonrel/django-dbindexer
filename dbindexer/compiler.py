@@ -9,7 +9,7 @@ from django.db.models.sql.where import Constraint
 Constraint.__repr__ = __repr__
 
 # TODO: manipulate a copy of the query instead of the query itself. This has to
-# be done because the query can be reused afterwoods by the user so that a
+# be done because the query can be reused afterwards by the user so that a
 # manipulated query can result in strange behavior for these cases!
 #TODO: Add watching layer which gives suggestions for indexes via query inspection
 # at runtime
