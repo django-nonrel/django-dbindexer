@@ -133,7 +133,7 @@ def unref_alias(query, alias):
             del query.table_map[table_name]
         query.used_aliases.discard(alias)
 
-class PKNullFix(BaseResolver):
+class FKNullFix(BaseResolver):
     '''
         Django doesn't generate correct code for ForeignKey__isnull.
         It becomes a JOIN with pk__isnull which won't work on nonrel DBs,

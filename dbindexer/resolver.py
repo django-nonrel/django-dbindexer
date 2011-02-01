@@ -5,7 +5,9 @@ from django.core.exceptions import ImproperlyConfigured
 class Resolver(object):
     def __init__(self):
         self.backends = []
-        for backend in settings.DBINDEXER_BACKENDS:
+        for backend in getattr(settings, 'DBINDEXER_BACKENDS',
+                               ('dbindexer.backends.BaseResolver',
+                                'dbindexer.backends.FKNullFix')):
                 self.backends.append(self.load_backend(backend))
 
     def load_backend(self, path):
