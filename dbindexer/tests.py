@@ -2,6 +2,7 @@ from django.db import models
 from django.test import TestCase
 from dbindexer.api import register_index
 from dbindexer.lookups import StandardLookup
+from dbindexer.resolver import resolver 
 from djangotoolbox.fields import ListField
 from datetime import datetime
 import re
@@ -22,32 +23,22 @@ class Indexed(models.Model):
     foreignkey2 = models.ForeignKey(ForeignIndexed2, related_name='idx_set', null=True)
     tags = ListField(models.CharField(max_length=500, null=True))
 
-register_index(Indexed, {
-    'name': ('iexact', 'endswith', 'istartswith', 'iendswith', 'contains',
-             'icontains', re.compile('^i+', re.I), re.compile('^I+'),
-             re.compile('^i\d*i$', re.I)),
-    'published': ('month', 'day', 'year', 'week_day'),
-    'tags': ('iexact', 'icontains', StandardLookup() ),
-#    'foreignkey': 'iexact',
-    'foreignkey__title': 'iexact',
-    'foreignkey__name_fi': 'iexact',
-    'foreignkey__fk__name_fi2': ('iexact', 'endswith'),
-    'foreignkey2__name_fi2': (StandardLookup(), 'iexact'),
-    'foreignkey2__age': (StandardLookup())
-})
-
-register_index(ForeignIndexed, {
-    'title': 'iexact',
-    'name_fi': ('iexact', 'icontains'),
-    'fk__name_fi2': ('iexact', 'endswith'),
-    'fk__age': (StandardLookup()),
-})
-
 # TODO: add test for foreign key with multiple filters via different and equal paths
 # to do so we have to create some entities matching equal paths but not matching
 # different paths
 class TestIndexed(TestCase):
     def setUp(self):
+        self.backends = list(resolver.backends)
+        resolver.backends = []
+        resolver.load_backends(('dbindexer.backends.BaseResolver',
+                      'dbindexer.backends.FKNullFix',
+                      'dbindexer.backends.InMemoryJOINResolver',
+#                      'dbindexer.backends.ConstantFieldJOINResolver',
+        ))
+        self.register_indexex()
+        for backend in resolver.backends:
+            print backend.index_map
+        
         juubi = ForeignIndexed2(name_fi2='Juubi', age=2)
         juubi.save()
         rikudo = ForeignIndexed2(name_fi2='Rikudo', age=200)
@@ -66,7 +57,31 @@ class TestIndexed(TestCase):
                 foreignkey2=juubi).save()
         Indexed(name='I1038593i', tags=('Sharingan'), foreignkey=hachibi,
                 foreignkey2=rikudo).save()
-                
+    
+    def tearDown(self):
+        resolver.backends = self.backends
+        
+    def register_indexex(self):
+        register_index(Indexed, {
+            'name': ('iexact', 'endswith', 'istartswith', 'iendswith', 'contains',
+                     'icontains', re.compile('^i+', re.I), re.compile('^I+'),
+                     re.compile('^i\d*i$', re.I)),
+            'published': ('month', 'day', 'year', 'week_day'),
+            'tags': ('iexact', 'icontains', StandardLookup() ),
+        #    'foreignkey': 'iexact',
+            'foreignkey__title': 'iexact',
+            'foreignkey__name_fi': 'iexact',
+            'foreignkey__fk__name_fi2': ('iexact', 'endswith'),
+            'foreignkey2__name_fi2': (StandardLookup(), 'iexact'),
+            'foreignkey2__age': (StandardLookup())
+        })
+        
+        register_index(ForeignIndexed, {
+            'title': 'iexact',
+            'name_fi': ('iexact', 'icontains'),
+            'fk__name_fi2': ('iexact', 'endswith'),
+            'fk__age': (StandardLookup()),
+        })
         
     # TODO: add tests for created indexes for all backends!
 #    def test_model_fields(self):

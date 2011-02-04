@@ -21,6 +21,7 @@ class BaseResolver(object):
     def create_index(self, lookup):
         field_to_index = self.get_field_to_index(lookup.model, lookup.field_name)
         
+        # backend doesn't now how to handle this index definition
         if not field_to_index:
             return 
         
@@ -38,6 +39,13 @@ class BaseResolver(object):
             lookup.model.add_to_class(self.index_name(lookup), index_field)
             self.index_map[lookup] = index_field
             self.add_column_to_name(lookup.model, lookup.field_name)
+        else:
+            if lookup not in self.index_map:
+                self.index_map[lookup] = lookup.model._meta.get_field(
+                    self.index_name(lookup))
+                self.add_column_to_name(lookup.model, lookup.field_name)
+                
+        
 
     def convert_query(self, query):
         '''Converts a database saving query.'''
