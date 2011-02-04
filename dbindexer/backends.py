@@ -77,9 +77,13 @@ class BaseResolver(object):
 
     def convert_filter(self, query, filters, child, index):
         constraint, lookup_type, annotation, value = child
+        
+        if constraint.field is None:
+            return
+        
         field_name = self.column_to_name.get(constraint.field.column)
-        if field_name and constraint.field is not None and \
-                constraint.alias == query.table_map[query.model._meta.db_table][0]:
+        if field_name and constraint.alias == \
+                query.table_map[query.model._meta.db_table][0]:
             for lookup in self.index_map.keys():
                 if lookup.matches_filter(query.model, field_name, lookup_type,
                                          value):
