@@ -1,6 +1,6 @@
 from setuptools import setup, find_packages
 
-DESCRIPTION = 'Emulate SQL features on NoSQL/non-relational DBs'
+DESCRIPTION = 'Expressive NoSQL'
 LONG_DESCRIPTION = None
 try:
     LONG_DESCRIPTION = open('README.rst').read()
