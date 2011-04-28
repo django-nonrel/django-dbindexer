@@ -40,6 +40,7 @@ class BaseResolver(object):
             self.index_map[lookup] = index_field
             self.add_column_to_name(lookup.model, lookup.field_name)
         else:
+            # makes dbindexer unit test compatible
             if lookup not in self.index_map:
                 self.index_map[lookup] = lookup.model._meta.get_field(
                     self.index_name(lookup))

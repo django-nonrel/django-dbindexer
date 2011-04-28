@@ -32,12 +32,10 @@ class TestIndexed(TestCase):
         resolver.backends = []
         resolver.load_backends(('dbindexer.backends.BaseResolver',
                       'dbindexer.backends.FKNullFix',
-                      'dbindexer.backends.InMemoryJOINResolver',
-#                      'dbindexer.backends.ConstantFieldJOINResolver',
+#                      'dbindexer.backends.InMemoryJOINResolver',
+                      'dbindexer.backends.ConstantFieldJOINResolver',
         ))
         self.register_indexex()
-        for backend in resolver.backends:
-            print backend.index_map
         
         juubi = ForeignIndexed2(name_fi2='Juubi', age=2)
         juubi.save()
