@@ -1,6 +1,6 @@
 from setuptools import setup, find_packages
 
-DESCRIPTION = 'Emulate SQL features on NoSQL/non-relational DBs'
+DESCRIPTION = 'Expressive NoSQL'
 LONG_DESCRIPTION = None
 try:
     LONG_DESCRIPTION = open('README.rst').read()
@@ -8,7 +8,7 @@ except:
     pass
 
 setup(name='django-dbindexer',
-      version='0.2',
+      version='0.3',
       packages=find_packages(),
       author='Waldemar Kornewald, Thomas Wanschik',
       author_email='team@allbuttonspressed.com',
