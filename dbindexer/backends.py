@@ -191,9 +191,12 @@ class ConstantFieldJOINResolver(BaseResolver):
             BaseResolver.create_index(self, lookup)
     
     def convert_query(self, query):
-        for lookup in self.index_map.keys():
-            if lookup.model == query.model and '__' in lookup.field_name:
-                BaseResolver.convert_query(self, query)
+# TODO: Why do we check for '__' here if the BaseResolver iterates through all
+# lookups anyway?
+#        for lookup in self.index_map.keys():
+#            if lookup.model == query.model and '__' in lookup.field_name:
+#                BaseResolver.convert_query(self, query)
+        BaseResolver.convert_query(self, query)
     
     def convert_filter(self, query, filters, child, index):
         constraint, lookup_type, annotation, value = child
