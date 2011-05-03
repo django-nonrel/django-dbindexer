@@ -46,22 +46,23 @@ class BaseResolver(object):
                     self.index_name(lookup))
                 self.add_column_to_name(lookup.model, lookup.field_name)
                 
-        
-
-    def convert_query(self, query):
+    def convert_insert_query(self, query):
         '''Converts a database saving query.'''
         
         for lookup in self.index_map.keys():
-            if not lookup.model == query.model:
-                continue
-            
-            position = self.get_query_position(query, lookup)
-            if position is None:
-                return
-            
-            value = self.get_value(lookup.model, lookup.field_name, query)
-            value = lookup.convert_value(value)
-            query.values[position] = (self.get_index(lookup), value)
+            self._convert_insert_query(query, lookup)
+    
+    def _convert_insert_query(self, query, lookup):
+        if not lookup.model == query.model:
+            return
+                    
+        position = self.get_query_position(query, lookup)
+        if position is None:
+            return
+        
+        value = self.get_value(lookup.model, lookup.field_name, query)
+        value = lookup.convert_value(value)
+        query.values[position] = (self.get_index(lookup), value)
             
     def convert_filters(self, query):
         self._convert_filters(query, query.where)
@@ -156,7 +157,7 @@ class FKNullFix(BaseResolver):
     def create_index(self, lookup):
         pass
     
-    def convert_query(self, query):
+    def convert_insert_query(self, query):
         pass
     
     def convert_filter(self, query, filters, child, index):
@@ -188,20 +189,19 @@ class FKNullFix(BaseResolver):
 class ConstantFieldJOINResolver(BaseResolver):
     def create_index(self, lookup):
         if '__' in lookup.field_name:
-            BaseResolver.create_index(self, lookup)
+            super(ConstantFieldJOINResolver, self).create_index(lookup)
     
-    def convert_query(self, query):
-# TODO: Why do we check for '__' here if the BaseResolver iterates through all
-# lookups anyway?
-#        for lookup in self.index_map.keys():
-#            if lookup.model == query.model and '__' in lookup.field_name:
-#                BaseResolver.convert_query(self, query)
-        BaseResolver.convert_query(self, query)
+    def convert_insert_query(self, query):
+        '''Converts a database saving query.'''
+        
+        for lookup in self.index_map.keys():
+            if '__' in lookup.field_name:
+                self._convert_insert_query(query, lookup)
     
     def convert_filter(self, query, filters, child, index):
         constraint, lookup_type, annotation, value = child
         field_chain = self.get_field_chain(query, constraint)
-
+        
         if field_chain is None:
             return
         
@@ -218,10 +218,12 @@ class ConstantFieldJOINResolver(BaseResolver):
     def get_field_to_index(self, model, field_name):
         model = self.get_model_chain(model, field_name)[-1]
         field_name = field_name.split('__')[-1]
-        return BaseResolver.get_field_to_index(self, model, field_name)
+        return super(ConstantFieldJOINResolver, self).get_field_to_index(model,
+            field_name)
     
     def get_value(self, model, field_name, query):
-        value = BaseResolver.get_value(self, model, field_name.split('__')[0],
+        value = super(ConstantFieldJOINResolver, self).get_value(model,
+                                    field_name.split('__')[0],
                                     query)
         if value is not None:
             value = self.get_target_value(model, field_name, value)
@@ -302,7 +304,7 @@ class ConstantFieldJOINResolver(BaseResolver):
 class InMemoryJOINResolver(ConstantFieldJOINResolver):
     def __init__(self):
         self.field_chains = []
-        ConstantFieldJOINResolver.__init__(self)
+        super(InMemoryJOINResolver, self).__init__()
 
     def create_index(self, lookup):
         if '__' in lookup.field_name:
@@ -322,10 +324,10 @@ class InMemoryJOINResolver(ConstantFieldJOINResolver):
             model = self.get_model_chain(lookup.model, lookup.field_name)[-1]
             lookup.model = model
             lookup.field_name = lookup.field_name.split('__')[-1]
-            BaseResolver.create_index(self, lookup)
-
-    def convert_query(self, query):
-        BaseResolver.convert_query(self, query)
+            super(ConstantFieldJOINResolver, self).create_index(lookup)
+    
+    def convert_insert_query(self, query):
+        super(ConstantFieldJOINResolver, self).convert_insert_query(query)
         
     def _convert_filters(self, query, filters):
         # or queries are not supported for in-memory-JOINs
@@ -351,7 +353,8 @@ class InMemoryJOINResolver(ConstantFieldJOINResolver):
             return
         
         if '__' not in field_chain:
-            return BaseResolver.convert_filter(self, query, filters, child, index)
+            return super(ConstantFieldJOINResolver, self).convert_filter(query,
+                filters, child, index)
         
         pks = self.get_pks(query, field_chain, lookup_type, value)
         self.resolve_join(query, child)

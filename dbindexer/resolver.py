@@ -34,8 +34,8 @@ class Resolver(object):
         for backend in self.backends:
             backend.create_index(lookup)
 
-    def convert_query(self, query):
+    def convert_insert_query(self, query):
         for backend in self.backends:
-            backend.convert_query(query)
+            backend.convert_insert_query(query)
 
 resolver = Resolver()
