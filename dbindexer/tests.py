@@ -1,8 +1,8 @@
 from django.db import models
 from django.test import TestCase
-from dbindexer.api import register_index
-from dbindexer.lookups import StandardLookup
-from dbindexer.resolver import resolver 
+from .api import register_index
+from .lookups import StandardLookup
+from .resolver import resolver 
 from djangotoolbox.fields import ListField
 from datetime import datetime
 import re

@@ -1,4 +1,4 @@
-from resolver import resolver
+from .resolver import resolver
 from django.utils.importlib import import_module
 
 def __repr__(self):

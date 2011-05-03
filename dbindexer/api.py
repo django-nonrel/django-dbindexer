@@ -1,6 +1,6 @@
-from lookups import LookupDoesNotExist, ExtraFieldLookup
-import lookups as lookups_module
-from resolver import resolver
+from .lookups import LookupDoesNotExist, ExtraFieldLookup
+from . import lookups as lookups_module
+from .resolver import resolver
 import inspect
 
 # TODO: add possibility to add lookup modules

@@ -4,7 +4,7 @@ from django.db.models.sql.constants import JOIN_TYPE, LHS_ALIAS, LHS_JOIN_COL, \
     TABLE_NAME, RHS_JOIN_COL
 from django.utils.tree import Node
 from djangotoolbox.fields import ListField
-from dbindexer.lookups import StandardLookup
+from .lookups import StandardLookup
 
 OR = 'OR'
 
@@ -62,7 +62,7 @@ class BaseResolver(object):
             value = self.get_value(lookup.model, lookup.field_name, query)
             value = lookup.convert_value(value)
             query.values[position] = (self.get_index(lookup), value)
-    
+            
     def convert_filters(self, query):
         self._convert_filters(query, query.where)
 
