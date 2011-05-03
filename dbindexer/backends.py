@@ -253,7 +253,11 @@ class ConstantFieldJOINResolver(BaseResolver):
         foreignkey = target_model.objects.all().get(pk=pk)
         for value in fields[1:-1]:
             foreignkey = getattr(foreignkey, value)
-        return getattr(foreignkey, fields[-1])
+        
+        if isinstance(foreignkey._meta.get_field(fields[-1]), models.ForeignKey):
+            return getattr(foreignkey, '%s_id' % fields[-1])
+        else:
+            return getattr(foreignkey, fields[-1])
     
     def add_column_to_name(self, model, field_name):
         model_chain = self.get_model_chain(model, field_name)

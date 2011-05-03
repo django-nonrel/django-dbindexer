@@ -66,7 +66,7 @@ class TestIndexed(TestCase):
                      re.compile('^i\d*i$', re.I)),
             'published': ('month', 'day', 'year', 'week_day'),
             'tags': ('iexact', 'icontains', StandardLookup() ),
-        #    'foreignkey': 'iexact',
+            'foreignkey__fk': (StandardLookup()),
             'foreignkey__title': 'iexact',
             'foreignkey__name_fi': 'iexact',
             'foreignkey__fk__name_fi2': ('iexact', 'endswith'),
@@ -166,6 +166,10 @@ class TestIndexed(TestCase):
     
     def test_standard_lookups(self):
         self.assertEqual(1, Indexed.objects.filter(tags__exact='Naruto').count())
+        
+        # test standard lookup on foreign_key
+        juubi = ForeignIndexed2.objects.all().get(name_fi2='Juubi', age=2)
+        self.assertEqual(2, Indexed.objects.filter(foreignkey__fk=juubi).count())
     
     def test_delete(self):
         Indexed.objects.get(name__iexact='itaChi').delete()
