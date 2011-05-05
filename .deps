@@ -2,4 +2,4 @@
 django-autoload = https://bitbucket.org/twanschik/django-autoload  
 
 [links]
-django-autoload = django-autoload/autoload 
+autoload = django-autoload/autoload 
