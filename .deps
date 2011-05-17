@@ -1,5 +1,5 @@
 [repos]
-django-autoload = https://bitbucket.org/twanschik/django-autoload  
+django-autoload = https://bitbucket.org/twanschik/django-autoload
 
 [links]
-autoload = django-autoload/autoload 
+autoload = django-autoload/autoload
