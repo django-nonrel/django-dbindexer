@@ -2,4 +2,4 @@
 django-autoload = https://bitbucket.org/twanschik/django-autoload
 
 [links]
-autoload = django-autoload/autoload
+dbindexer = django-dbindexer/dbindexer
