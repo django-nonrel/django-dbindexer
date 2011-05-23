@@ -31,4 +31,5 @@ def DatabaseWrapper(settings_dict, *args, **kwargs):
     target = import_module(engine).DatabaseWrapper
     class Wrapper(BaseDatabaseWrapper, target):
         pass
+    settings_dict.update(target_settings)
     return Wrapper(settings_dict, *args, **kwargs)
