@@ -179,6 +179,9 @@ class TestIndexed(TestCase):
         Indexed.objects.all().delete()
         self.assertEqual(0, Indexed.objects.all().filter(name__iexact='itaChi').count())
 
+    def test_exists_query(self):
+        self.assertTrue(Indexed.objects.filter(name__iexact='itaChi').exists())
+
     def test_istartswith(self):
         self.assertEqual(1, len(Indexed.objects.all().filter(name__istartswith='iTa')))
 

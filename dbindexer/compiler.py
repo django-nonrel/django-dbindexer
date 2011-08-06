@@ -27,6 +27,10 @@ class SQLCompiler(BaseCompiler):
         self.convert_filters()
         return super(SQLCompiler, self).results_iter()
 
+    def has_results(self):
+        self.convert_filters()
+        return super(SQLCompiler, self).has_results()
+
 
 class SQLInsertCompiler(BaseCompiler):
     def execute_sql(self, return_id=False):
