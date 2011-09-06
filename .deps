@@ -1,5 +1,2 @@
-[repos]
-django-autoload = https://bitbucket.org/twanschik/django-autoload
-
 [links]
 dbindexer = django-dbindexer/dbindexer
