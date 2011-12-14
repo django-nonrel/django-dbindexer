@@ -23,6 +23,9 @@ class Indexed(models.Model):
     foreignkey2 = models.ForeignKey(ForeignIndexed2, related_name='idx_set', null=True)
     tags = ListField(models.CharField(max_length=500, null=True))
 
+class NullableCharField(models.Model):
+    name = models.CharField(max_length=500, null=True)
+
 # TODO: add test for foreign key with multiple filters via different and equal paths
 # to do so we have to create some entities matching equal paths but not matching
 # different paths
@@ -79,6 +82,10 @@ class TestIndexed(TestCase):
             'name_fi': ('iexact', 'icontains'),
             'fk__name_fi2': ('iexact', 'endswith'),
             'fk__age': (StandardLookup()),
+        })
+
+        register_index(NullableCharField, {
+             'name': ('iexact', 'istartswith', 'endswith', 'iendswith',)
         })
         
     # TODO: add tests for created indexes for all backends!
@@ -201,6 +208,11 @@ class TestIndexed(TestCase):
         self.assertEqual(4, len(Indexed.objects.all().filter(published__year=now.year)))
         self.assertEqual(4, len(Indexed.objects.all().filter(
             published__week_day=now.isoweekday())))
+
+    def test_null_strings(self):
+        """Test indexing with nullable CharFields, see: https://github.com/django-nonrel/django-dbindexer/issues/3."""
+        NullableCharField.objects.create()
+
 
 #    def test_contains(self):
 #        # passes on production but not on gae-sdk (development)

@@ -48,10 +48,11 @@ class ExtraFieldLookup(object):
         return lookup_type, value
     
     def convert_value(self, value):
-        if isinstance(value, (tuple, list)):
-            value = [self._convert_value(val) for val in value]
-        else:
-            value = self._convert_value(value)
+        if value is not None:
+            if isinstance(value, (tuple, list)):
+                value = [self._convert_value(val) for val in value]
+            else:
+                value = self._convert_value(value)
         return value
     
     def _convert_value(self, value):
