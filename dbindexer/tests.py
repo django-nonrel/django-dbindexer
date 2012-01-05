@@ -1,11 +1,11 @@
+import datetime
+import re
 from django.db import models
 from django.test import TestCase
 from .api import register_index
 from .lookups import StandardLookup
 from .resolver import resolver
 from djangotoolbox.fields import ListField
-from datetime import datetime
-import re
 
 class ForeignIndexed2(models.Model):
     name_fi2 = models.CharField(max_length=500)
@@ -22,9 +22,6 @@ class Indexed(models.Model):
     foreignkey = models.ForeignKey(ForeignIndexed, null=True)
     foreignkey2 = models.ForeignKey(ForeignIndexed2, related_name='idx_set', null=True)
     tags = ListField(models.CharField(max_length=500, null=True))
-
-class NullableCharField(models.Model):
-    name = models.CharField(max_length=500, null=True)
 
 # TODO: add test for foreign key with multiple filters via different and equal paths
 # to do so we have to create some entities matching equal paths but not matching
@@ -82,10 +79,6 @@ class TestIndexed(TestCase):
             'name_fi': ('iexact', 'icontains'),
             'fk__name_fi2': ('iexact', 'endswith'),
             'fk__age': (StandardLookup()),
-        })
-
-        register_index(NullableCharField, {
-             'name': ('iexact', 'istartswith', 'endswith', 'iendswith',)
         })
 
     # TODO: add tests for created indexes for all backends!
@@ -202,16 +195,12 @@ class TestIndexed(TestCase):
         self.assertEqual(1, len(Indexed.objects.all().filter(name__iregex='^i\d*i$')))
 
     def test_date_filters(self):
-        now = datetime.now()
+        now = datetime.datetime.now()
         self.assertEqual(4, len(Indexed.objects.all().filter(published__month=now.month)))
         self.assertEqual(4, len(Indexed.objects.all().filter(published__day=now.day)))
         self.assertEqual(4, len(Indexed.objects.all().filter(published__year=now.year)))
         self.assertEqual(4, len(Indexed.objects.all().filter(
             published__week_day=now.isoweekday())))
-
-    def test_null_strings(self):
-        """Test indexing with nullable CharFields, see: https://github.com/django-nonrel/django-dbindexer/issues/3."""
-        NullableCharField.objects.create()
 
     def test_contains(self):
         self.assertEqual(1, len(Indexed.objects.all().filter(name__contains='Aim')))
@@ -221,3 +210,43 @@ class TestIndexed(TestCase):
 
         # test icontains on a list
         self.assertEqual(2, len(Indexed.objects.all().filter(tags__icontains='RA')))
+
+
+class LookupsTest(TestCase):
+    def test_null_strings(self):
+        """Test indexing with nullable CharFields, see: https://github.com/django-nonrel/django-dbindexer/issues/3."""
+        class NullableCharField(models.Model):
+            name = models.CharField(max_length=500, null=True)
+        register_index(NullableCharField, {'name': ('iexact', 'istartswith', 'endswith', 'iendswith',)})
+        NullableCharField.objects.create()
+
+    def test_null_dates(self):
+        """Test if indexing doesn't crash with null dates."""
+        class NullableDate(models.Model):
+            date = models.DateField(null=True)
+        register_index(NullableDate, {'date': ('day', 'month', 'year', 'week_day',)})
+        NullableDate.objects.create(date=datetime.date(1, 1, 1))
+        NullableDate.objects.create(date=None)
+        self.assertEqual(1, NullableDate.objects.filter(date__year=1).count())
+        self.assertEqual(1, NullableDate.objects.filter(date__month=1).count())
+        self.assertEqual(1, NullableDate.objects.filter(date__day=1).count())
+        self.assertEqual(1, NullableDate.objects.filter(date__week_day=1).count())
+        self.assertEqual(1, NullableDate.objects.filter(date=None).count())
+
+    def test_null_datetimes(self):
+        """Test if indexing doesn't crash with null datetimes."""
+        class NullableDateTime(models.Model):
+            datetime = models.DateTimeField(null=True)
+        register_index(NullableDateTime, {'datetime': ('day', 'month', 'year', 'week_day',)})
+        NullableDateTime.objects.create(datetime=datetime.date(1, 1, 1))
+        NullableDateTime.objects.create(datetime=None)
+        self.assertEqual(1, NullableDateTime.objects.filter(datetime__year=1).count())
+        self.assertEqual(1, NullableDateTime.objects.filter(datetime__month=1).count())
+        self.assertEqual(1, NullableDateTime.objects.filter(datetime__day=1).count())
+        self.assertEqual(1, NullableDateTime.objects.filter(datetime__week_day=1).count())
+        self.assertEqual(1, NullableDateTime.objects.filter(datetime=None).count())
+
+
+class JoinsTest(TestCase):
+    pass
+
