@@ -1,19 +1,20 @@
-from collections import Mapping
 from django.conf import settings
 from django.utils.importlib import import_module
 
+
 def merge_dicts(d1, d2):
-    '''Update dictionary recursively.'''
+    '''Update dictionary recursively. If values for a given key exist in both dictionaries and are dict-like they are merged.'''
 
     for k, v in d2.iteritems():
 
-        # Only merge if the key exists in both dictionaries and both values are dictionary-like.
-        if k in d1 and isinstance(v, Mapping) and isinstance(d1[k], Mapping):
+        # Try to merge the values as if they were dicts.
+        try:
             merge_dicts(d1[k], v)
 
         # Otherwise just overwrite the original value (if any).
-        else:
+        except (AttributeError, KeyError):
             d1[k] = v
+
 
 class DatabaseOperations(object):
     dbindexer_compiler_module = __name__.rsplit('.', 1)[0] + '.compiler'
