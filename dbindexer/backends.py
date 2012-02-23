@@ -133,19 +133,29 @@ class BaseResolver(object):
                 return index
         return None
 
-def unref_alias(query, alias):
-    table_name = query.alias_map[alias][TABLE_NAME]
-    query.alias_refcount[alias] -= 1
-    if query.alias_refcount[alias] < 1:
-        # Remove all information about the join
-        del query.alias_refcount[alias]
-        del query.join_map[query.rev_join_map[alias]]
-        del query.rev_join_map[alias]
-        del query.alias_map[alias]
-        query.table_map[table_name].remove(alias)
-        if len(query.table_map[table_name]) == 0:
-            del query.table_map[table_name]
-        query.used_aliases.discard(alias)
+    def unref_alias(self, query, alias):
+        '''
+        Completely removes the alias from query data structures.
+        '''
+        query.unref_alias(alias)
+
+        # Remove all information about the join like it was never
+        # added. We need to recreate table_map aliases list because
+        # sql.Query.clone makes a shallow copy of it.
+        if query.alias_refcount[alias] <= 0:
+            table_name = query.alias_map[alias][TABLE_NAME]
+            del query.alias_refcount[alias]
+            del query.alias_map[alias]
+            table_aliases = query.table_map[table_name][:]
+            table_aliases.remove(alias)
+            if table_aliases:
+                query.table_map[table_name] = table_aliases
+            else:
+                del query.table_map[table_name]
+                query.tables.remove(table_name)
+            del query.join_map[query.rev_join_map[alias]]
+            del query.rev_join_map[alias]
+            query.used_aliases.discard(alias)
 
 class FKNullFix(BaseResolver):
     '''
@@ -165,10 +175,7 @@ class FKNullFix(BaseResolver):
         if constraint.field is not None and lookup_type == 'isnull' and \
                         isinstance(constraint.field, models.ForeignKey):
             self.fix_fk_null_filter(query, constraint)
-
-    def unref_alias(self, query, alias):
-        unref_alias(query, alias)
-
+            
     def fix_fk_null_filter(self, query, constraint):
         alias = constraint.alias
         table_name = query.alias_map[alias][TABLE_NAME]
@@ -268,9 +275,6 @@ class ConstantFieldJOINResolver(BaseResolver):
         for model, name in zip(model_chain, field_names):
             column_chain += model._meta.get_field(name).column + '__'
         self.column_to_name[column_chain[:-2]] = field_name
-
-    def unref_alias(self, query, alias):
-        unref_alias(query, alias)
 
     def get_column_index(self, query, constraint):
         if constraint.field:
