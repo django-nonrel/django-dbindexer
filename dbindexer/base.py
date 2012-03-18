@@ -48,6 +48,7 @@ def DatabaseWrapper(settings_dict, *args, **kwargs):
         pass
 
     # Update settings with target database settings (which can contain nested dicts).
-    merge_dicts(settings_dict, target_settings)
+    merged_settings = settings_dict.copy()
+    merge_dicts(merged_settings, target_settings)
 
-    return Wrapper(settings_dict, *args, **kwargs)
+    return Wrapper(merged_settings, *args, **kwargs)
