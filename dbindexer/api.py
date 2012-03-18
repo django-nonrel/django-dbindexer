@@ -15,7 +15,7 @@ def register_index(model, mapping):
     for field_name, lookups in mapping.items():
         if not isinstance(lookups, (list, tuple)):
             lookups = (lookups, )
-            
+
         # create indexes and add model and field_name to lookups
         # create ExtraFieldLookup instances on the fly if needed
         for lookup in lookups:

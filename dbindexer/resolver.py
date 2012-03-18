@@ -12,7 +12,7 @@ class Resolver(object):
     def load_backends(self, backend_paths):
         for backend in backend_paths:
                 self.backends.append(self.load_backend(backend))
-    
+
     def load_backend(self, path):
         module_name, attr_name = path.rsplit('.', 1)
         try:
