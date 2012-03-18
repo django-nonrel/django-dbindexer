@@ -142,6 +142,7 @@ def unref_alias(query, alias):
         del query.join_map[query.rev_join_map[alias]]
         del query.rev_join_map[alias]
         del query.alias_map[alias]
+        query.tables.remove(alias)
         query.table_map[table_name].remove(alias)
         if len(query.table_map[table_name]) == 0:
             del query.table_map[table_name]
