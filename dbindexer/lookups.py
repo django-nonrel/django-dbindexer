@@ -50,7 +50,7 @@ class ExtraFieldLookup(object):
     def convert_value(self, value):
         if value is not None:
             if isinstance(value, (tuple, list)):
-                value = [self._convert_value(val) for val in value]
+                value = [self._convert_value(val) for val in value if val is not None]
             else:
                 value = self._convert_value(value)
         return value
@@ -259,4 +259,5 @@ class StandardLookup(ExtraFieldLookup):
         if isinstance(field_to_add, (models.DateTimeField,
                                     models.DateField, models.TimeField)):
             field_to_add.auto_now_add = field_to_add.auto_now = False
+        field_to_add.name = self.index_name
         return field_to_add
