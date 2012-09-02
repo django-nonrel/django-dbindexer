@@ -61,7 +61,7 @@ class BaseResolver(object):
             return
 
         value = self.get_value(lookup.model, lookup.field_name, query)
-        
+
         if isinstance(value, list):
             for i in range(0,len(value)):
                 setattr(query.objs[i], lookup.index_name, lookup.convert_value(value[i]))
@@ -132,7 +132,7 @@ class BaseResolver(object):
             values = []
             for obj in query.objs:
                 value = field_to_index.value_from_object(obj)
-                values.append(value)        
+                values.append(value)
             if len(values):
                 return values
         raise FieldDoesNotExist('Cannot find field in query.')
@@ -243,7 +243,7 @@ class ConstantFieldJOINResolver(BaseResolver):
         value = super(ConstantFieldJOINResolver, self).get_value(model,
                                     field_name.split('__')[0],
                                     query)
-        
+
         if isinstance(value, list):
             value = value[0]
         if value is not None:
