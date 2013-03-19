@@ -41,7 +41,7 @@ class BaseDatabaseWrapper(object):
         self.ops.__init__()
 
 def DatabaseWrapper(settings_dict, *args, **kwargs):
-    target_settings = settings.DATABASES[settings_dict['TARGET']]
+    target_settings = settings_dict['TARGET']
     engine = target_settings['ENGINE'] + '.base'
     target = import_module(engine).DatabaseWrapper
     class Wrapper(BaseDatabaseWrapper, target):
