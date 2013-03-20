@@ -152,10 +152,10 @@ def unref_alias(query, alias):
     table_name = query.alias_map[alias].table_name
     query.alias_refcount[alias] -= 1
     if query.alias_refcount[alias] < 1:
+        table, _, _, lhs, lhs_col, col, _ = query.alias_map[alias]
         # Remove all information about the join
         del query.alias_refcount[alias]
-        del query.join_map[query.rev_join_map[alias]]
-        del query.rev_join_map[alias]
+        del query.join_map[(lhs, table, lhs_col, col)]
         del query.alias_map[alias]
         query.tables.remove(alias)
         query.table_map[table_name].remove(alias)
