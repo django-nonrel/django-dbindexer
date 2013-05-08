@@ -42,3 +42,6 @@ class SQLUpdateCompiler(BaseCompiler):
 
 class SQLDeleteCompiler(BaseCompiler):
     pass
+
+class SQLDateCompiler(BaseCompiler):
+    pass
