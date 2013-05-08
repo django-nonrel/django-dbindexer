@@ -75,6 +75,9 @@ class ExtraFieldLookup(object):
         return field_to_add
 
 class DateLookup(ExtraFieldLookup):
+    # DateLookup is abstract so set lookup_types to None so it doesn't match
+    lookup_types = None
+
     def __init__(self, *args, **kwargs):
         defaults = {'new_lookup': 'exact',
                     'field_to_add': models.IntegerField(editable=False, null=True)}
