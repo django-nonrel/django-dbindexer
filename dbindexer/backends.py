@@ -28,7 +28,7 @@ class BaseResolver(object):
         index_field = lookup.get_field_to_add(field_to_index)
         config_field = index_field.item_field if \
             isinstance(index_field, ListField) else index_field
-        if hasattr(field_to_index, 'max_length') and \
+        if field_to_index.max_length is not None and \
                 isinstance(config_field, models.CharField):
             config_field.max_length = field_to_index.max_length
 
