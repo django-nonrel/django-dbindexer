@@ -213,13 +213,11 @@ class TestIndexed(TestCase):
         """Test indexing with nullable CharFields, see: https://github.com/django-nonrel/django-dbindexer/issues/3."""
         NullableCharField.objects.create()
 
+    def test_contains(self):
+        self.assertEqual(1, len(Indexed.objects.all().filter(name__contains='Aim')))
+        self.assertEqual(1, len(Indexed.objects.all().filter(name__icontains='aim')))
 
-#    def test_contains(self):
-#        # passes on production but not on gae-sdk (development)
-#        self.assertEqual(1, len(Indexed.objects.all().filter(name__contains='Aim')))
-#        self.assertEqual(1, len(Indexed.objects.all().filter(name__icontains='aim')))
-#
-#        self.assertEqual(1, ForeignIndexed.objects.filter(name_fi__icontains='Yu').count())
-#
-#        # test icontains on a list
-#        self.assertEqual(2, len(Indexed.objects.all().filter(tags__icontains='RA')))
+        self.assertEqual(1, ForeignIndexed.objects.filter(name_fi__icontains='Yu').count())
+
+        # test icontains on a list
+        self.assertEqual(2, len(Indexed.objects.all().filter(tags__icontains='RA')))
