@@ -61,18 +61,28 @@ class BaseResolver(object):
         value = self.get_value(lookup.model, lookup.field_name, query)
 
         if isinstance(value, list):
-            for i in range(0,len(value)):
+            for i in range(0, len(value)):
                 setattr(query.objs[i], lookup.index_name, lookup.convert_value(value[i]))
         else:
             try:
                 setattr(query.objs[0], lookup.index_name, lookup.convert_value(value))
-            except Exception, e:
+            except ValueError, e:
                 '''
-                TODO: If lookup.index_name is a foreign key field, we need to set the actual
+                If lookup.index_name is a foreign key field, we need to set the actual
                 referenced object, not just the id.  When we try to set the id, we get an
                 exception.
                 '''
-                pass
+                field_to_index = self.get_field_to_index(lookup.model, lookup.field_name)
+
+                # backend doesn't now how to handle this index definition
+                if not field_to_index:
+                    raise Exception('blah')
+
+                index_field = lookup.get_field_to_add(field_to_index)
+                if isinstance(index_field, models.ForeignKey):
+                    setattr(query.objs[0], '%s_id' % lookup.index_name, lookup.convert_value(value))
+                else:
+                    raise
 
     def convert_filters(self, query):
         self._convert_filters(query, query.where)
