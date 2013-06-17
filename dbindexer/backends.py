@@ -1,7 +1,10 @@
+from django.core.exceptions import ImproperlyConfigured
 from django.db import models
 from django.db.models.fields import FieldDoesNotExist
 from django.utils.tree import Node
+
 from djangotoolbox.fields import ListField
+
 from .lookups import StandardLookup
 
 OR = 'OR'
@@ -29,6 +32,13 @@ class BaseResolver(object):
         if field_to_index.max_length is not None and \
                 isinstance(config_field, models.CharField):
             config_field.max_length = field_to_index.max_length
+
+        if isinstance(field_to_index,
+            (models.DateField, models.DateTimeField, models.TimeField)):
+            if field_to_index.auto_now or field_to_index.auto_now_add:
+                raise ImproperlyConfigured('\'auto_now\' and \'auto_now_add\' '
+                    'on %s.%s is not supported by dbindexer.' %
+                    (lookup.model._meta.object_name, lookup.field_name))
 
         # don't install a field if it already exists
         try:

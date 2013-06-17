@@ -29,7 +29,7 @@ class NullableCharField(models.Model):
 # TODO: add test for foreign key with multiple filters via different and equal paths
 # to do so we have to create some entities matching equal paths but not matching
 # different paths
-class TestIndexed(TestCase):
+class IndexedTest(TestCase):
     def setUp(self):
         self.backends = list(resolver.backends)
         resolver.backends = []
@@ -67,7 +67,6 @@ class TestIndexed(TestCase):
             'name': ('iexact', 'endswith', 'istartswith', 'iendswith', 'contains',
                      'icontains', re.compile('^i+', re.I), re.compile('^I+'),
                      re.compile('^i\d*i$', re.I)),
-            'published': ('month', 'day', 'year', 'week_day'),
             'tags': ('iexact', 'icontains', StandardLookup() ),
             'foreignkey__fk': (StandardLookup()),
             'foreignkey__title': 'iexact',
@@ -201,14 +200,6 @@ class TestIndexed(TestCase):
         self.assertEqual(2, len(Indexed.objects.all().filter(name__regex='^I+')))
         self.assertEqual(1, len(Indexed.objects.all().filter(name__iregex='^i\d*i$')))
 
-    def test_date_filters(self):
-        now = datetime.now()
-        self.assertEqual(4, len(Indexed.objects.all().filter(published__month=now.month)))
-        self.assertEqual(4, len(Indexed.objects.all().filter(published__day=now.day)))
-        self.assertEqual(4, len(Indexed.objects.all().filter(published__year=now.year)))
-        self.assertEqual(4, len(Indexed.objects.all().filter(
-            published__week_day=now.isoweekday())))
-
     def test_null_strings(self):
         """Test indexing with nullable CharFields, see: https://github.com/django-nonrel/django-dbindexer/issues/3."""
         NullableCharField.objects.create()
@@ -221,3 +212,55 @@ class TestIndexed(TestCase):
 
         # test icontains on a list
         self.assertEqual(2, len(Indexed.objects.all().filter(tags__icontains='RA')))
+
+
+class AutoNowIndexed(models.Model):
+    published = models.DateTimeField(auto_now=True)
+
+class AutoNowAddIndexed(models.Model):
+    published = models.DateTimeField(auto_now_add=True)
+
+class DateIndexed(models.Model):
+    published = models.DateTimeField()
+
+class DateAutoNowTest(TestCase):
+    def setUp(self):
+        self.backends = list(resolver.backends)
+        resolver.backends = []
+        resolver.load_backends(('dbindexer.backends.BaseResolver',
+                      'dbindexer.backends.FKNullFix',
+#                      'dbindexer.backends.InMemoryJOINResolver',
+                      'dbindexer.backends.ConstantFieldJOINResolver',
+        ))
+        self.register_indexex()
+
+        DateIndexed(published=datetime.now()).save()
+        DateIndexed(published=datetime.now()).save()
+        DateIndexed(published=datetime.now()).save()
+        DateIndexed(published=datetime.now()).save()
+
+    def tearDown(self):
+        resolver.backends = self.backends
+
+    def register_indexex(self):
+        register_index(DateIndexed, {
+            'published': ('month', 'day', 'year', 'week_day'),
+        })
+
+    def test_auto_now(self):
+        from django.core.exceptions import ImproperlyConfigured
+
+        self.assertRaises(ImproperlyConfigured, register_index, AutoNowIndexed, {
+            'published': ('month', 'day', 'year', 'week_day'),
+        })
+        self.assertRaises(ImproperlyConfigured, register_index, AutoNowAddIndexed, {
+            'published': ('month', 'day', 'year', 'week_day'),
+        })
+
+    def test_date_filters(self):
+        now = datetime.now()
+        self.assertEqual(4, len(DateIndexed.objects.all().filter(published__month=now.month)))
+        self.assertEqual(4, len(DateIndexed.objects.all().filter(published__day=now.day)))
+        self.assertEqual(4, len(DateIndexed.objects.all().filter(published__year=now.year)))
+        self.assertEqual(4, len(DateIndexed.objects.all().filter(
+            published__week_day=now.isoweekday())))
