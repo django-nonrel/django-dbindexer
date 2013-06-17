@@ -86,7 +86,8 @@ class BaseResolver(object):
 
                 # backend doesn't now how to handle this index definition
                 if not field_to_index:
-                    raise Exception('blah')
+                    raise Exception('Unable to convert insert query because of unknown field'
+                        ' %s.%s' % (lookup.model._meta.object_name, lookup.field_name))
 
                 index_field = lookup.get_field_to_add(field_to_index)
                 if isinstance(index_field, models.ForeignKey):
