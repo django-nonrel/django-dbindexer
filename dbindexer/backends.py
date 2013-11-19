@@ -1,3 +1,4 @@
+import django
 from django.core.exceptions import ImproperlyConfigured
 from django.db import models
 from django.db.models.fields import FieldDoesNotExist
@@ -5,7 +6,19 @@ from django.utils.tree import Node
 
 from djangotoolbox.fields import ListField
 
-from .lookups import StandardLookup
+from dbindexer.lookups import StandardLookup
+
+if django.VERSION >= (1, 5):
+    TABLE_NAME = 0
+    RHS_ALIAS = 1
+    JOIN_TYPE = 2
+    LHS_ALIAS = 3
+    LHS_JOIN_COL = 4
+    RHS_JOIN_COL = 5
+    NULLABLE = 6
+else:
+    from django.db.models.sql.constants import (JOIN_TYPE, LHS_ALIAS,
+        LHS_JOIN_COL, TABLE_NAME, RHS_JOIN_COL)
 
 OR = 'OR'
 
@@ -170,13 +183,18 @@ class BaseResolver(object):
         return None
 
 def unref_alias(query, alias):
-    table_name = query.alias_map[alias].table_name
+    table_name = query.alias_map[alias][TABLE_NAME]
     query.alias_refcount[alias] -= 1
     if query.alias_refcount[alias] < 1:
-        table, _, _, lhs, lhs_col, col, _ = query.alias_map[alias]
         # Remove all information about the join
         del query.alias_refcount[alias]
-        del query.join_map[(lhs, table, lhs_col, col)]
+        if hasattr(query, 'rev_join_map'):
+            # Django 1.4 compatibility
+            del query.join_map[query.rev_join_map[alias]]
+            del query.rev_join_map[alias]
+        else:
+            table, _, _, lhs, lhs_col, col, _ = query.alias_map[alias]
+            del query.join_map[(lhs, table, lhs_col, col)]
         del query.alias_map[alias]
         query.tables.remove(alias)
         query.table_map[table_name].remove(alias)
@@ -208,14 +226,14 @@ class FKNullFix(BaseResolver):
 
     def fix_fk_null_filter(self, query, constraint):
         alias = constraint.alias
-        table_name = query.alias_map[alias].table_name
-        lhs_join_col = query.alias_map[alias].lhs_join_col
-        rhs_join_col = query.alias_map[alias].rhs_join_col
+        table_name = query.alias_map[alias][TABLE_NAME]
+        lhs_join_col = query.alias_map[alias][LHS_JOIN_COL]
+        rhs_join_col = query.alias_map[alias][RHS_JOIN_COL]
         if table_name != constraint.field.rel.to._meta.db_table or \
                 rhs_join_col != constraint.field.rel.to._meta.pk.column or \
                 lhs_join_col != constraint.field.column:
             return
-        next_alias = query.alias_map[alias].lhs_alias
+        next_alias = query.alias_map[alias][LHS_ALIAS]
         if not next_alias:
             return
         self.unref_alias(query, alias)
@@ -318,9 +336,9 @@ class ConstantFieldJOINResolver(BaseResolver):
             alias = constraint.alias
             while alias:
                 join = query.alias_map.get(alias)
-                if join and join.join_type == 'INNER JOIN':
-                    column_chain += '__' + join.lhs_join_col
-                    alias = query.alias_map[alias].lhs_alias
+                if join and join[JOIN_TYPE] == 'INNER JOIN':
+                    column_chain += '__' + join[LHS_JOIN_COL]
+                    alias = query.alias_map[alias][LHS_ALIAS]
                 else:
                     alias = None
         return '__'.join(reversed(column_chain.split('__')))
@@ -332,7 +350,7 @@ class ConstantFieldJOINResolver(BaseResolver):
 
         alias = constraint.alias
         while True:
-            next_alias = query.alias_map[alias].lhs_alias
+            next_alias = query.alias_map[alias][LHS_ALIAS]
             if not next_alias:
                 break
             self.unref_alias(query, alias)

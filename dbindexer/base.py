@@ -42,6 +42,8 @@ class BaseDatabaseWrapper(object):
 
 def DatabaseWrapper(settings_dict, *args, **kwargs):
     target_settings = settings_dict['TARGET']
+    if isinstance(target_settings, (str, unicode)):
+        target_settings = settings.DATABASES[target_settings]
     engine = target_settings['ENGINE'] + '.base'
     target = import_module(engine).DatabaseWrapper
     class Wrapper(BaseDatabaseWrapper, target):
