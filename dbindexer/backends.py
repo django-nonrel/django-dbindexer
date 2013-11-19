@@ -4,21 +4,37 @@ from django.db import models
 from django.db.models.fields import FieldDoesNotExist
 from django.utils.tree import Node
 
+try:
+    from django.db.models.sql.where import SubqueryConstraint
+except ImportError:
+    SubqueryConstraint = None
+
 from djangotoolbox.fields import ListField
 
 from dbindexer.lookups import StandardLookup
 
-if django.VERSION >= (1, 5):
+if django.VERSION >= (1, 6):
     TABLE_NAME = 0
     RHS_ALIAS = 1
     JOIN_TYPE = 2
     LHS_ALIAS = 3
-    LHS_JOIN_COL = 4
-    RHS_JOIN_COL = 5
-    NULLABLE = 6
+
+    def join_cols(join_info):
+        return join_info.join_cols[0]
+elif django.VERSION >= (1, 5):
+    TABLE_NAME = 0
+    RHS_ALIAS = 1
+    JOIN_TYPE = 2
+    LHS_ALIAS = 3
+
+    def join_cols(join_info):
+        return (join_info.lhs_join_col, join_info.rhs_join_col)
 else:
     from django.db.models.sql.constants import (JOIN_TYPE, LHS_ALIAS,
         LHS_JOIN_COL, TABLE_NAME, RHS_JOIN_COL)
+
+    def join_cols(join_info):
+        return (join_info[LHS_JOIN_COL], join_info[RHS_JOIN_COL])
 
 OR = 'OR'
 
@@ -119,6 +135,9 @@ class BaseResolver(object):
                 self._convert_filters(query, child)
                 continue
 
+            if SubqueryConstraint is not None and isinstance(child, SubqueryConstraint):
+                continue
+
             self.convert_filter(query, filters, child, index)
 
     def convert_filter(self, query, filters, child, index):
@@ -193,8 +212,14 @@ def unref_alias(query, alias):
             del query.join_map[query.rev_join_map[alias]]
             del query.rev_join_map[alias]
         else:
-            table, _, _, lhs, lhs_col, col, _ = query.alias_map[alias]
-            del query.join_map[(lhs, table, lhs_col, col)]
+            try:
+                table, _, _, lhs, join_cols, _, _ = query.alias_map[alias]
+                del query.join_map[(lhs, table, join_cols)]
+            except KeyError:
+                # Django 1.5 compatibility
+                table, _, _, lhs, lhs_col, col, _ = query.alias_map[alias]
+                del query.join_map[(lhs, table, lhs_col, col)]
+
         del query.alias_map[alias]
         query.tables.remove(alias)
         query.table_map[table_name].remove(alias)
@@ -227,8 +252,7 @@ class FKNullFix(BaseResolver):
     def fix_fk_null_filter(self, query, constraint):
         alias = constraint.alias
         table_name = query.alias_map[alias][TABLE_NAME]
-        lhs_join_col = query.alias_map[alias][LHS_JOIN_COL]
-        rhs_join_col = query.alias_map[alias][RHS_JOIN_COL]
+        lhs_join_col, rhs_join_col = join_cols(query.alias_map[alias])
         if table_name != constraint.field.rel.to._meta.db_table or \
                 rhs_join_col != constraint.field.rel.to._meta.pk.column or \
                 lhs_join_col != constraint.field.column:
@@ -331,17 +355,18 @@ class ConstantFieldJOINResolver(BaseResolver):
         unref_alias(query, alias)
 
     def get_column_index(self, query, constraint):
+        column_chain = []
         if constraint.field:
-            column_chain = constraint.field.column
+            column_chain.append(constraint.col)
             alias = constraint.alias
             while alias:
                 join = query.alias_map.get(alias)
                 if join and join[JOIN_TYPE] == 'INNER JOIN':
-                    column_chain += '__' + join[LHS_JOIN_COL]
+                    column_chain.insert(0, join_cols(join)[0])
                     alias = query.alias_map[alias][LHS_ALIAS]
                 else:
                     alias = None
-        return '__'.join(reversed(column_chain.split('__')))
+        return '__'.join(column_chain)
 
     def resolve_join(self, query, child):
         constraint, lookup_type, annotation, value = child
