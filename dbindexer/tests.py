@@ -38,7 +38,7 @@ class IndexedTest(TestCase):
 #                      'dbindexer.backends.InMemoryJOINResolver',
                       'dbindexer.backends.ConstantFieldJOINResolver',
         ))
-        self.register_indexex()
+        self.register_indexes()
 
         juubi = ForeignIndexed2(name_fi2='Juubi', age=2)
         juubi.save()
@@ -62,7 +62,7 @@ class IndexedTest(TestCase):
     def tearDown(self):
         resolver.backends = self.backends
 
-    def register_indexex(self):
+    def register_indexes(self):
         register_index(Indexed, {
             'name': ('iexact', 'endswith', 'istartswith', 'iendswith', 'contains',
                      'icontains', re.compile('^i+', re.I), re.compile('^I+'),
@@ -232,7 +232,7 @@ class DateAutoNowTest(TestCase):
 #                      'dbindexer.backends.InMemoryJOINResolver',
                       'dbindexer.backends.ConstantFieldJOINResolver',
         ))
-        self.register_indexex()
+        self.register_indexes()
 
         DateIndexed(published=datetime.now()).save()
         DateIndexed(published=datetime.now()).save()
@@ -242,7 +242,7 @@ class DateAutoNowTest(TestCase):
     def tearDown(self):
         resolver.backends = self.backends
 
-    def register_indexex(self):
+    def register_indexes(self):
         register_index(DateIndexed, {
             'published': ('month', 'day', 'year', 'week_day'),
         })
