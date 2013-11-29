@@ -1,10 +1,4 @@
-from distutils.core import setup
-import os
-
-def get_packages(package):
-    return [dirpath
-            for dirpath, dirnames, filenames in os.walk(package)
-            if os.path.exists(os.path.join(dirpath, '__init__.py'))]
+from setuptools import setup, find_packages
 
 
 DESCRIPTION = 'Expressive NoSQL for Django'
@@ -15,13 +9,13 @@ except:
     pass
 
 setup(name='django-dbindexer',
-      version='1.6.0',
+      version='1.6.1',
       description=DESCRIPTION,
       long_description=LONG_DESCRIPTION,
       author='Waldemar Kornewald, Thomas Wanschik',
       author_email='team@allbuttonspressed.com',
       url='https://github.com/django-nonrel/django-dbindexer',
-      packages=get_packages('dbindexer'),
+      packages=find_packages(),
       license='3-clause BSD',
       classifiers=[
           'Development Status :: 4 - Beta',
